@@ -1,8 +1,0 @@
-- module: postgresql
-  metricsets:
-  - status
-  - database
-  - performance
-  period: 600s # Attention : une période inférieure à 30s génère beaucoup de données
-  hosts: ["postgresql://{{ obs_postgresql_user }}:{{ obs_postgresql_password }}@tcp(127.0.0.1:{{ db_port }})/?tls=preferred"]
-  

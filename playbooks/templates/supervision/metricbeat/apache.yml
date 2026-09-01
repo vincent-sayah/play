@@ -1,6 +1,0 @@
-- module: apache
-  metricsets:
-    - status
-  period: 600s
-  
-  hosts: ["http://127.0.0.1"]
