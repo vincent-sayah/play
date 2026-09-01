@@ -1,0 +1,55 @@
+---
+- name: Ensure required groups exist
+  ansible.builtin.assert:
+    that:
+      - groups.loadbalancer is defined
+      - (groups.loadbalancer | length) > 0
+      - groups.postgresql_primary is defined
+      - (groups.postgresql_primary | length) > 0
+      - groups.postgresql_replica is defined
+      - (groups.postgresql_replica | length) > 0
+    fail_msg: >-
+      Groups loadbalancer/postgresql_primary/postgresql_replica must exist and contain hosts
+      in the inventory used by the pipeline.
+
+- name: Gather facts for hosts referenced in pg_hba.conf (works even with --limit)
+  ansible.builtin.setup:
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  run_once: true
+  loop: >-
+    {%- set candidates = (groups['loadbalancer'] | default([]))
+          + (groups['postgresql_primary'] | default([]))
+          + (groups['postgresql_replica'] | default([])) -%}
+    {%- set out = [] -%}
+    {%- for h in candidates | unique -%}
+    {%-   if (hostvars.get(h, {}).get('ansible_host', '') | string | length) > 0 -%}
+    {%-     set _ = out.append(h) -%}
+    {%-   endif -%}
+    {%- endfor -%}
+    {{ out }}
+
+- name: Deploy pg_hba.conf
+  ansible.builtin.template:
+    src: templates/pg_hba.conf.j2
+    dest: "{{ postgres_path_data }}/data/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: "0600"
+
+## ajouter la valeur repmgr à la variable shared_preload_librairies dans postgres.conf
+- name: Modification de shared_preload_libraries dans postgres.conf
+  lineinfile:
+    path: "{{ postgres_path_data }}/data/postgresql.conf"
+    regexp: '^#?shared_preload_libraries'
+    line: 'shared_preload_libraries = repmgr'
+    state: present
+
+# création du fichier .pgpass de la vm bdd primary
+- name: Déploiement du fichier .pgpass sur bdd standby
+  template:
+    src: templates/.pgpass.j2
+    dest: /var/lib/pgsql/.pgpass
+    owner: postgres
+    group: postgres
+    mode: '600'

@@ -1,0 +1,15 @@
+---
+
+## Task de suppression des datas placés dans /tmp
+
+- name: Supprimer les datas temporaires dans /tmp
+  ansible.builtin.file:
+    path: "{{ vm_file_path }}{{ item }}"
+    state: absent
+  loop:
+    - "{{ ca_chain_xapi }}"
+    - "{{ ca_elastic }}"
+    - "{{ server_kibana_crt }}"
+    - "{{ server_kibana_key }}"
+    - "{{ oauth2_tar }}"
+    - "{{ oauth2_tar }}{{ oauth2_extension }}"

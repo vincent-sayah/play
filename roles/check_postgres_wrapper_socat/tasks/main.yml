@@ -1,0 +1,8 @@
+# configuration du fichier check_postgres_socat.sh
+- name: Déploiement script check_postgres_socat.sh
+  template:
+    src: templates/check_postgres_socat.sh.j2
+    dest: /usr/local/bin/check_postgres_socat.sh
+    owner: postgres
+    group: postgres
+    mode: '750'

@@ -1,0 +1,49 @@
+{# es_node_key est fourni via vars de groupe (node1/node2/node3) #}
+{% set es_node_key = es_node_key | mandatory %}
+
+cluster.name: {{ cluster_name }}
+node.name: {{ es_node_key }}
+path.data: {{ es_data_dirs | to_json }}
+path.logs: /var/log/elasticsearch
+network.host: {{ http_host }}
+http.port: {{ http_port }}
+
+# Découverte du cluster
+{% if es_bootstrap_mode | default(false) %}
+# Mode bootstrap : single-node pour initialiser les mots de passe intégrés
+discovery.type: single-node
+{% else %}
+{% set seed_hosts = groups['elasticsearch_cluster'] | map('extract', hostvars, 'ansible_host') | list %}
+discovery.seed_hosts: {{ seed_hosts | to_json }}
+
+{# IMPORTANT: cluster.initial_master_nodes doit correspondre aux node.name => node1/node2/node3 #}
+cluster.initial_master_nodes: {{ initial_masters | to_json }}
+{% endif %}
+
+# Sécurité (8.x: activée par défaut). On force pour clarté.
+xpack.security.enabled: true
+xpack.security.enrollment.enabled: true
+
+# TLS transport (inter-nœuds) – requis pour cluster multi-nœuds
+xpack.security.transport.ssl.enabled: true
+xpack.security.transport.ssl.verification_mode: certificate
+xpack.security.transport.ssl.key: {{ es_certs_dir }}/{{ es_node_key }}.key
+xpack.security.transport.ssl.certificate: {{ es_certs_dir }}/{{ es_node_key }}.crt
+xpack.security.transport.ssl.certificate_authorities: [ "{{ es_certs_dir }}/{{ ca_elastic }}" ]
+
+# TLS HTTP (backend HAProxy → ES)
+{% if enable_http_tls %}
+xpack.security.http.ssl.enabled: true
+xpack.security.http.ssl.key: {{ es_certs_dir }}/{{ es_node_key }}.key
+xpack.security.http.ssl.certificate: {{ es_certs_dir }}/{{ es_node_key }}.crt
+xpack.security.http.ssl.certificate_authorities: [ "{{ es_certs_dir }}/{{ ca_elastic }}" ]
+{% else %}
+xpack.security.http.ssl.enabled: false
+{% endif %}
+
+# Autoriser les requêtes destructives sans nom explicite
+action.destructive_requires_name: false
+
+# Activer la collecte interne de monitoring
+xpack.monitoring.collection.enabled: true
+xpack.monitoring.elasticsearch.collection.enabled: true

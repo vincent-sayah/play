@@ -1,0 +1,35 @@
+## Récupération du CA IGC_ACI depuis médusa et copie dans /tmp
+- name: Récupération du CA IGC_ACI et dépôt sur la VM
+  minarm.core.adaptable.get_url:
+    url: "atf://{{ ca_portailxapi_file_path }}"
+    dest: "{{ vm_file_path }}"
+    url_category: "livrable"
+    username: "{{ artifactory_user }}"
+    password: "{{ artifactory_password }}"
+
+## Récupération du CA IGC_ACE depuis médusa et copie dans fichier /tmp
+- name: Récupération du CA IGC_ACE et dépôt sur la VM
+  minarm.core.adaptable.get_url:
+    url: "atf://{{ ca_chain_xapi_file_path }}"
+    dest: "{{ vm_file_path }}"
+    url_category: "livrable"
+    username: "{{ artifactory_user }}"
+    password: "{{ artifactory_password }}"
+
+## Récupération du cert_front_xapi.crt depuis médusa et copie dans fichier /tmp
+- name: Récupération cert_front_xapi.crt depuis Medusa
+  minarm.core.adaptable.get_url:
+    url: "atf://{{ server_apache_portailxapi_crt_file_path }}"
+    dest: "{{ vm_file_path }}"
+    url_category: "livrable"
+    username: "{{ artifactory_user }}"
+    password: "{{ artifactory_password }}"
+
+## Récupération du cert_front_xapi.key depuis médusa et copie dans fichier /tmp
+- name: Récupération cert_front_xapi.key depuis Medusa
+  minarm.core.adaptable.get_url:
+    url: "atf://{{ server_apache_portailxapi_key_file_path }}"
+    dest: "{{ vm_file_path }}"
+    url_category: "livrable"
+    username: "{{ artifactory_user }}"
+    password: "{{ artifactory_password }}"

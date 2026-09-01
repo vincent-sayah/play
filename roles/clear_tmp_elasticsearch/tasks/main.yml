@@ -1,0 +1,18 @@
+---
+
+## Task de suppression des datas placés dans /tmp
+
+- name: Supprimer des datas temporaires dans /tmp
+  ansible.builtin.file:
+    path: "{{ vm_file_path }}{{ item }}"
+    state: absent
+  loop:
+    - "{{ ca_elastic }}"
+    - "es-bootstrap"
+    - "GPG-KEY-elasticsearch"
+    - "node1.crt"
+    - "node1.key"
+    - "node2.crt"
+    - "node2.key"
+    - "node3.crt"
+    - "node3.key"

@@ -1,0 +1,53 @@
+---
+# vérifier que le fichier est présent => stocker le résultat dans une variable
+- name: Check presence of the metadata file
+  ansible.builtin.stat:
+    path: "{{ api_obs_health_path }}/{{ api_obs_meta_file_name }}"
+  register: meta_file
+
+- name: Report if the file is missing
+  ansible.builtin.debug:
+    msg: "Le fichier de métadonnées {{ api_obs_meta_file_name }} est manquant"
+  when: not meta_file.stat.exists
+
+- name: Read file and store values in corresponding variables
+  when: meta_file.stat.exists
+  block:
+    - name: Report if the file exists
+      ansible.builtin.debug:
+        msg: "Le fichier de métadonnées {{ api_obs_meta_file_name }} est bien présent"
+
+    - name: Get meta file content
+      ansible.builtin.slurp:
+        src: "{{ meta_file.stat.path }}"
+      register: metadata_file_return
+      changed_when: false
+
+    - name: Decode the file content
+      ansible.builtin.set_fact:
+        metadata_content: "{{ metadata_file_return['content'] | b64decode }}"
+
+    - name: Parse json into a variable
+      ansible.builtin.set_fact:
+        metadata_json: "{{ metadata_content | from_json }}"
+      when: metadata_content is string
+
+    - name: Debug
+      debug:
+        msg: "La variable metadata_json vaut {{ metadata_json }}"
+      when: metadata_json is defined
+
+    - name: Debug
+      debug:
+        msg: "La variable metadata_content vaut {{ metadata_content }}"
+      when: metadata_content is defined
+
+    - name: Parse meta file for configuration datas
+      ansible.builtin.set_fact:
+        api_obs_version_api: "{{ metadata_json.version }}"
+      when: metadata_content is string
+
+    - name: Parse meta file for configuration datas directly
+      ansible.builtin.set_fact:
+        api_obs_version_api: "{{ metadata_content.version }}"
+      when: metadata_content is not string

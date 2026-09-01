@@ -1,0 +1,32 @@
+---
+- name: Récupération du CA.cert et dépôt sur la VM dans /tmp/
+  minarm.core.adaptable.get_url:
+    url: "atf://{{ medusa_cert_file_path }}"
+    dest: "{{ vm_file_path }}"
+    url_category: "livrable"
+    username: "{{ artifactory_user }}"
+    password: "{{ artifactory_password }}"
+
+- name: Récupération de kibana.crt et dépôt sur la VM dans /tmp/
+  minarm.core.adaptable.get_url:
+    url: "atf://{{ medusa_kibana_cert_file_path }}"
+    dest: "{{ vm_file_path }}"
+    url_category: "livrable"
+    username: "{{ artifactory_user }}"
+    password: "{{ artifactory_password }}"
+
+- name: Récupération de kibana.key et dépôt sur la VM dans /tmp/
+  minarm.core.adaptable.get_url:
+    url: "atf://{{ medusa_kibana_key_file_path }}"
+    dest: "{{ vm_file_path }}"
+    url_category: "livrable"
+    username: "{{ artifactory_user }}"
+    password: "{{ artifactory_password }}"
+
+- name: Récupération du CA_CHAIN_XAPI_MN.crt et dépôt sur la VM
+  minarm.core.adaptable.get_url:
+    url: "atf://{{ ca_chain_xapi_file_path }}"
+    dest: "{{ vm_file_path }}"
+    url_category: "livrable"
+    username: "{{ artifactory_user }}"
+    password: "{{ artifactory_password }}"

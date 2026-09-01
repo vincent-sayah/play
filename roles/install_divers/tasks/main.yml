@@ -1,0 +1,14 @@
+- name: Install nano
+  package:
+    name: nano
+    state: present
+
+- name: Install socat
+  package:
+    name: socat
+    state: present
+
+- name: Install rsync
+  package:
+    name: rsync
+    state: present

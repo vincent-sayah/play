@@ -1,0 +1,41 @@
+# copier renommer .env.example en .env
+# definir l'URL public APP_URL
+# executer la commande : php artisan key:generate
+
+- name: Copy .env from template (secure perms)
+  become: true
+  ansible.builtin.template:
+    src: templates/.env.j2
+    dest: /Data/www/traxlrs/.env
+    owner: "apache"
+    group: "apache"
+    mode: '0640'
+    backup: true
+
+- name: Set permissions for .env file
+  file:
+    path: /Data/www/traxlrs/.env
+    mode: '0755'
+
+- name: Set permissions for /Data
+  file:
+    path: /Data
+    mode: '0755'
+
+- name: Check if APP_KEY is already set (non-empty)
+  become: true
+  ansible.builtin.shell: grep -E '^APP_KEY=.+$' /Data/www/traxlrs/.env
+  register: appkey_check
+  changed_when: false
+  failed_when: false
+
+- name: Generate application key if missing
+  become: true
+  become_user: "apache"
+  ansible.builtin.command: php artisan key:generate --no-interaction
+  args:
+    chdir: /Data/www/traxlrs
+  environment:
+    PATH: "/usr/local/bin:/usr/bin:{{ ansible_env.PATH | default('') }}"
+  when: appkey_check.rc != 0
+  changed_when: true

@@ -1,0 +1,10 @@
+- name: Ajout cron TRAX php artisan schedule
+  cron:
+    name: "Cron TRAX LRS scheduler"
+    user: "apache"
+    minute: "*"
+    hour: "*"
+    day: "*"
+    month: "*"
+    weekday: "*"
+    job: "cd /Data/www/traxlrs/ && php artisan schedule:run >> /dev/null 2>&1"

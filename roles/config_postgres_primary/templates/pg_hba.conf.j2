@@ -1,0 +1,24 @@
+{% set haproxy_hosts = (groups.loadbalancer | first) %}
+{% set primary_hosts = (groups.postgresql_primary | first) %}
+{% set replica_hosts = (groups.postgresql_replica | first) %}
+
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+# Local connections:
+local   all     all                     scram-sha-256
+host    all     all     127.0.0.1/32    scram-sha-256
+
+# Hosts connections:
+hostssl    {{ postgres_bdd_trax }}   {{ postgres_user_trax }}        {{ hostvars[haproxy_hosts]['ansible_facts']['default_ipv4']['address'] }}/32    scram-sha-256
+hostssl    {{ postgres_bdd_portailxapi }}   {{ postgres_user_portailxapi }}        {{ hostvars[haproxy_hosts]['ansible_facts']['default_ipv4']['address'] }}/32    scram-sha-256
+hostssl    {{ postgres_bdd_repmgr }}  {{postgres_user_repmgr }}      {{ hostvars[haproxy_hosts]['ansible_facts']['default_ipv4']['address'] }}/32   scram-sha-256
+
+# Replications connections:
+local   replication {{postgres_user_repmgr }}                trust
+host    replication {{postgres_user_repmgr }} 127.0.0.1/32   trust
+hostssl    replication {{postgres_user_repmgr }} {{ hostvars[primary_hosts]['ansible_facts']['default_ipv4']['address'] }}/32  scram-sha-256
+hostssl    replication {{postgres_user_repmgr }} {{ hostvars[replica_hosts]['ansible_facts']['default_ipv4']['address'] }}/32  scram-sha-256
+
+local   {{ postgres_bdd_repmgr }} {{postgres_user_repmgr }}                     trust
+host    {{ postgres_bdd_repmgr }} {{postgres_user_repmgr }} 127.0.0.1/32        trust
+hostssl    {{ postgres_bdd_repmgr }} {{postgres_user_repmgr }} {{ hostvars[primary_hosts]['ansible_facts']['default_ipv4']['address'] }}/32       scram-sha-256
+hostssl    {{ postgres_bdd_repmgr }} {{postgres_user_repmgr }} {{ hostvars[replica_hosts]['ansible_facts']['default_ipv4']['address'] }}/32       scram-sha-256

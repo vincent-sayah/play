@@ -1,0 +1,32 @@
+---
+
+# Rôle : trax_selinux / tasks/main.yml
+- name: Pré-requis SELinux pour Trax
+  become: true
+  vars:
+    trax_dir: /Data/www/traxlrs
+  block:
+    - name: Installer les outils SELinux nécessaires
+      ansible.builtin.package:
+        name: policycoreutils-python-utils
+        state: present
+
+    # Règle persistante (semanage fcontext)
+    - name: Définir la règle fcontext pour {{ trax_dir }}
+      community.general.sefcontext:
+        target: "{{ trax_dir }}(/.*)?"
+        setype: httpd_sys_rw_content_t
+        state: present
+
+    # Dry-run pour savoir si restorecon ferait des changements
+    - name: Vérifier si un restorecon est nécessaire (dry-run)
+      ansible.builtin.command: restorecon -nRv {{ trax_dir }}/
+      register: restorecon_dry
+      changed_when: false
+      failed_when: false
+
+    # Appliquer le contexte uniquement si nécessaire
+    - name: Appliquer le contexte SELinux
+      ansible.builtin.command: restorecon -Rv {{ trax_dir }}/
+      when: restorecon_dry.stdout | length > 0
+      changed_when: true
