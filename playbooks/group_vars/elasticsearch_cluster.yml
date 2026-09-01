@@ -1,0 +1,127 @@
+---
+
+#####################################################################
+#                                 LVM                               #
+#####################################################################
+
+## Définition des groupes de volumes logiques (Volume Groups) pour les vm bases de données LV_ELASTIC
+lvm_volume_groups:
+  - vg: 'VG_DATA'
+    pvs: ['/dev/sdb']
+    logical_volumes:
+      - lv: LV_ELASTIC
+        size: 100%VG
+        mount: '/var/lib/elasticsearch'
+        mount_state: 'mounted'
+        state: 'present'
+        fs_type: 'xfs'
+
+#####################################################################
+#                Configuration elasticsearch                        #
+#####################################################################
+
+cluster_name: "cluster-TRAX"
+
+# Variables d'installation attendues par minarm.elastic.elasticsearch_install
+# Le rôle construit l'URL finale ainsi :
+#   {{ es_package_url }}-{{ es_version }}-x86_64.rpm
+# Exemple final :
+#   https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-8.19.16-x86_64.rpm
+es_version: "8.19.16"
+es_package_url: "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch"
+es_download_timeout: 300
+es_start_service: false
+
+# Alias conservé pour compatibilité avec d'anciens templates/variables éventuels.
+elasticsearch_version: "{{ es_version }}"
+
+es_bootstrap_node: "node1"
+
+# Heap ~50% de la RAM sans dépasser 31g (G1GC par défaut en 8.x)
+es_heap_size: "2g"
+
+# Répertoire des données (peut être un FS dédié)
+es_data_dirs:
+  - /var/lib/elasticsearch
+
+# Adresse HTTP et port exposée (HAProxy en amont). 0.0.0.0 si filtré par firewall.
+http_host: "0.0.0.0"
+http_port: 9200
+
+# Répertoire des certificats côté cible
+es_certs_dir: "/etc/elasticsearch/certs"
+
+# Utiliser le mode TLS complet (HTTP + transport)
+enable_http_tls: true
+# Liste des nœuds maîtres éligibles (initial cluster)
+initial_masters: "{{ groups['elasticsearch_cluster'][:3] | map('extract', hostvars, 'inventory_hostname') | list }}"
+
+# Mode bootstrap (single-node) pour initialiser les mots de passe intégrés
+# Par défaut false ; on l’active pour le 1er nœud au moment du bootstrap (via extra_vars ou host_vars).
+es_bootstrap_mode: false
+
+#####################################################################
+#            Path des CERTS à uploader dans Médusa                  #
+#####################################################################
+
+# Path Medusa utilisé pour les upload des cert dans medusa
+# medusa_cert_url: "medusa.picsel.defense.gouv.fr:443/artifactory/"
+medusa_cert_url: "{{ FQDN_BRM_SERVER }}:443/artifactory/"
+
+ca_cert_file_path: "{{ vm_file_path }}es-bootstrap/ca/{{ ca_elastic }}"
+ca_key_file_path: "{{ vm_file_path }}es-bootstrap/ca/{{ ca_key_elastic }}"
+
+es_nodes:
+  node1:
+    cert: "{{ vm_file_path }}es-bootstrap/node1/node1.crt"
+    key: "{{ vm_file_path }}es-bootstrap/node1/node1.key"
+  node2:
+    cert: "{{ vm_file_path }}es-bootstrap/node2/node2.crt"
+    key: "{{ vm_file_path }}es-bootstrap/node2/node2.key"
+  node3:
+    cert: "{{ vm_file_path }}es-bootstrap/node3/node3.crt"
+    key: "{{ vm_file_path }}es-bootstrap/node3/node3.key"
+
+medusa_es_nodes:
+  node1:
+    cert: "{{ identifiant_zp_repo }}-generic/certificats_es/node1.crt"
+    key: "{{ identifiant_zp_repo }}-generic/certificats_es/node1.key"
+  node2:
+    cert: "{{ identifiant_zp_repo }}-generic/certificats_es/node2.crt"
+    key: "{{ identifiant_zp_repo }}-generic/certificats_es/node2.key"
+  node3:
+    cert: "{{ identifiant_zp_repo }}-generic/certificats_es/node3.crt"
+    key: "{{ identifiant_zp_repo }}-generic/certificats_es/node3.key"
+
+## Ouverture des ports nécessaires pour le cluster elasticsearch
+firewalld:
+  - name: "Ouverture du port 9200"
+    port: "9200/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+  - name: "Ouverture du port 9300"
+    port: "9300/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+#####################################################################
+#            Variables tenant observability                         #
+#####################################################################
+
+
+# Variables attendues par minarm.elastic.elasticsearch_install.
+# Le rôle est utilisé pour l'installation du paquet ; la configuration finale est ensuite
+# écrasée par le rôle custom elastic_cluster afin de conserver le comportement historique.
+es_config:
+  cluster.name: "{{ cluster_name }}"
+  node.name: "{{ es_node_key | default(inventory_hostname) }}"
+  network.host: "{{ http_host }}"
+  cluster.initial_master_nodes: "{{ initial_masters }}"
+  discovery.seed_hosts: "{{ groups['elasticsearch_cluster'] | map('extract', hostvars, 'ansible_host') | list }}"
+  bootstrap.memory_lock: false
+
+obs_service: elasticsearch
+obs_role: BDD_nosql

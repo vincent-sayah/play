@@ -1,0 +1,26 @@
+---
+
+scope: "openid"
+cookie_name: "_o2p"
+cookie_samesite: "lax"
+cookie_expire: "30m"
+cookie_refresh: "25m"
+code_challenge_method: "S256"
+
+# Adresse d’écoute locale de oauth2-proxy
+http_address_oauth2: "127.0.0.1"
+port_oauth2: "4180"
+
+owner_oauth2: "oauth2-proxy"
+group_oauth2: "oauth2-proxy"
+
+config_oauth2: "oauth2-proxy.cfg"
+path_oauth2: "/etc/oauth2-proxy"
+path_oauth2_config: "{{ path_oauth2 }}/{{ config_oauth2 }}"
+path_oauth2_service: "/etc/systemd/system/oauth2-proxy.service"
+path_binaire_oauth2: "/opt/oauth2-proxy"
+
+path_nginx_kibana_config: "/etc/nginx/conf.d/kibana.conf"
+
+role_kibana_runas: "kb_proxy_runas"
+user_kibana_proxy: "kibana-proxy"

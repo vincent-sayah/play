@@ -1,0 +1,68 @@
+- name: Gather facts
+  hosts: all
+  gather_facts: true
+  tasks: []
+
+## Autoriser Wilcard avant l'installation de trax
+- name: Désactiver action.destructive_requires_name sur tous les nœuds Elasticsearch
+  hosts: elasticsearch_cluster
+  become: true
+  environment:
+    MINARM_ATF_REPO_LIVRABLE_BASEURL: "{{ medusa_url }}"
+  collections:
+    - minarm.gds
+  tasks:
+    - name: Lire la valeur actuelle
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}:9200/_cluster/settings?include_defaults=true"
+        method: GET
+        url_username: elastic
+        url_password: "{{ elastic_password }}"
+        force_basic_auth: true
+        validate_certs: true
+        ca_path: "/etc/elasticsearch/certs/{{ ca_elastic }}"
+        return_content: true
+      register: es_settings
+      changed_when: false
+
+    - name: Désactiver seulement si nécessaire
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}:9200/_cluster/settings"
+        method: PUT
+        url_username: elastic
+        url_password: "{{ elastic_password }}"
+        force_basic_auth: true
+        validate_certs: true
+        ca_path: "/etc/elasticsearch/certs/{{ ca_elastic }}"
+        body_format: json
+        body:
+          persistent:
+            action.destructive_requires_name: false
+        status_code: 200
+        return_content: true
+      when: >
+        (
+          es_settings.json.transient.action.destructive_requires_name
+          | default(
+              es_settings.json.persistent.action.destructive_requires_name
+              | default(
+                  es_settings.json.defaults.action.destructive_requires_name
+                  | default(true)
+              )
+          )
+        ) | bool
+      register: es_api_response
+
+- name: Configuration de TRAX
+  hosts: front
+  become: true
+  environment:
+    MINARM_ATF_REPO_LIVRABLE_BASEURL: "{{ medusa_url }}"
+  collections:
+    - minarm.gds
+    - community.general
+  roles:
+    - role: trax_config
+    - role: trax_selinux
+    - role: trax_database
+    - role: trax_cron

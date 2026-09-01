@@ -1,0 +1,80 @@
+---
+
+#######################################
+##              LVM                  ##
+##                                   ##
+#######################################
+
+## Définition des groupes de volumes logiques (Volume Groups) pour la vm haproxy LV_HAPROXY
+lvm_volume_groups:
+  - vg: 'VG_DATA'
+    pvs: ['/dev/sdb']
+    logical_volumes:
+      - lv: LV_HAPROXY
+        size: 100%VG
+        mount: '/Data'
+        mount_state: 'mounted'
+        state: 'present'
+        fs_type: 'xfs'
+
+#######################################
+##             RUCHE                 ##
+##                                   ##
+#######################################
+
+## Chemin du template haproxy.cfg
+haproxy_config_template: ../templates/haproxy.cfg.j2
+
+## IP des VM BDD cluster utilisées dans le fichier haproxy.cfg
+
+haproxy_pg_primary_host: "{{ groups['postgresql_primary'] | first }}"
+haproxy_pg_replica_host: "{{ groups['postgresql_replica'] | first }}"
+
+haproxy_backend_servers:
+  - name: pg1
+    ip: "{{ hostvars[haproxy_pg_primary_host].ansible_host }}"
+  - name: pg2
+    ip: "{{ hostvars[haproxy_pg_replica_host].ansible_host }}"
+
+haproxy_package_name: haproxy30z
+haproxy_version: " "
+haproxy_state: present
+
+#####################################################################
+#            Variables tenant observability                         #
+#####################################################################
+
+obs_service: haproxy
+obs_role: load_balancer
+
+## Variable et configuration du firewall
+firewalld:
+  - name: "Ouverture du port 80"
+    port: "80/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+  - name: "Ouverture du port 443"
+    port: "443/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+  - name: "Ouverture du port 5432"
+    port: "5432/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+  - name: "Ouverture du port 9200"
+    port: "9200/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+  - name: "Ouverture du port 8404"
+    port: "8404/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"

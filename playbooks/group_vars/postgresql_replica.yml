@@ -1,0 +1,54 @@
+---
+
+#############################################
+##               RUCHE                     ##
+##                                         ##
+#############################################
+postgresql_unix_account_password: "{{ postgresql_unix_account_password }}"
+postgresql_db_account_password: "{{ postgresql_db_account_password }}"
+postgresql_version: 17.6
+postgresql_listen_addresses: "*"
+postgres_path_data: "/var/lib/pgsql/17"
+postgresql_ssl_enable: false
+
+# postgresql_unix_account: postgres
+# postgresql_db_account: postgres
+postgres_user_repmgr: "repl"
+postgres_bdd_repmgr: "repmgr"
+
+#####################################################################
+#            Variables tenant observability                         #
+#####################################################################
+
+db_port: "5432"
+obs_service: postgresql-17
+obs_role: postgresql_standby
+obs_beats_modules:
+  - templates/supervision/filebeat/postgresql.yml
+  - templates/supervision/metricbeat/postgresql.yml
+
+## Ouverture des ports nécéssaires pour le groupe database
+firewalld:
+  - name: "Ouverture du port 80"
+    port: "80/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+  - name: "Ouverture du port 443"
+    port: "443/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+  - name: "Ouverture du port 5432"
+    port: "5432/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+  - name: "Ouverture du port 9200"
+    port: "9200/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"

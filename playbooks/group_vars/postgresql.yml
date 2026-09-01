@@ -1,0 +1,54 @@
+---
+#####################################################################
+#          Configuration TLS PostgreSQL gérée par Vault             #
+#####################################################################
+
+postgresql_pg_major: "{{ (postgresql_version | string).split('.')[0] }}"
+postgresql_data_dir: "/var/lib/pgsql/{{ postgresql_pg_major }}/data"
+postgresql_ssl_dir: "{{ postgresql_data_dir }}/ssl"
+
+# Le certificat correspond au véritable FQDN de chaque VM PostgreSQL.
+postgresql_vault_expected_cn: "{{ ansible_host | lower }}"
+
+vault_agent_https_cn: "{{ postgresql_vault_expected_cn }}"
+
+vault_agent_https_sans:
+  - "{{ postgresql_vault_expected_cn }}"
+
+# Vault écrit directement dans le répertoire SSL PostgreSQL définitif.
+vault_agent_https_cert: >-
+  {{ postgresql_ssl_dir }}/{{ postgresql_vault_expected_cn }}.pem
+
+vault_agent_https_pk: >-
+  {{ postgresql_ssl_dir }}/{{ postgresql_vault_expected_cn }}.key
+
+vault_agent_https_ca_chain: >-
+  {{ postgresql_ssl_dir }}/{{ postgresql_vault_expected_cn }}_ca_chain.pem
+
+# Droits nécessaires au processus PostgreSQL.
+owner_ca_chain: root
+group_ca_chain: postgres
+mode_ca_chain: "0644"
+
+owner_certificate: root
+group_certificate: postgres
+mode_certificate: "0644"
+
+owner_private_key: root
+group_private_key: postgres
+mode_private_key: "0640"
+
+# Ne pas utiliser web_service: postgresql.
+# La commande prédéfinie échoue si PostgreSQL est arrêté, notamment pendant
+# le clonage du standby.
+web_service: none
+agent_command: "if /usr/bin/systemctl is-active --quiet postgresql-{{ postgresql_pg_major }}; then sudo /usr/bin/systemctl reload postgresql-{{ postgresql_pg_major }}; else /bin/true; fi"
+
+# PostgreSQL est d'abord installé sans TLS.
+# TLS sera activé après la génération des fichiers par Vault.
+postgresql_ssl_enable: false
+
+# Chemins utilisés dans postgresql.conf.
+postgresql_ssl_ca_file: "{{ vault_agent_https_ca_chain }}"
+postgresql_ssl_server_cert_file: "{{ vault_agent_https_cert }}"
+postgresql_ssl_server_key_file: "{{ vault_agent_https_pk }}"

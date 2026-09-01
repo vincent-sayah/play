@@ -1,0 +1,153 @@
+---
+
+#######################################
+##              LVM                  ##
+##                                   ##
+#######################################
+
+## Définition des groupes de volumes logiques (Volume Groups) pour la vm portailxapi LV_WEB
+lvm_volume_groups:
+  - vg: 'VG_DATA'
+    pvs: ['/dev/sdb']
+    logical_volumes:
+      - lv: LV_WEB
+        size: 100%VG
+        mount: '/Data'
+        mount_state: 'mounted'
+        state: 'present'
+        fs_type: 'xfs'
+
+#############################################
+##                Metier                   ##
+##                                         ##
+#############################################
+
+## Packages placés dans Médusa nécéssaire pour l'architecture TRAX 
+## PORTAILXAPI files
+portailxapi_package: "portailxapi_files.tar.gz"
+portailxapi_file_path: "{{ identifiant_zp_repo }}-generic/portailxapi/{{ portailxapi_package }}"
+
+## Variable configuration Apache
+apache_www_path: "/Data/www/portailxapi"
+apache_server_name: "{{ alias_dns_portailxapi }}.{{ zone_url }}"
+
+#############################################
+##          APACHE CERTIFICATES            ##
+##                                         ##
+#############################################
+
+## conf certs apache via GDS / vault_get_cert
+## Les certificats seront générés par Vault Agent et renouvelés automatiquement.
+
+vault_agent_https_ca_chain: "/etc/pki/tls/ca_chain/{{ alias_dns_portailxapi }}.{{ zone_url }}_ca_chain.pem"
+vault_agent_https_cert: "/etc/pki/tls/certs/{{ alias_dns_portailxapi }}.{{ zone_url }}.pem"
+vault_agent_https_pk: "/etc/pki/tls/private/{{ alias_dns_portailxapi }}.{{ zone_url }}.key"
+vault_agent_https_cn: "{{ alias_dns_portailxapi }}.{{ zone_url }}"
+vault_agent_https_sans:
+  - "{{ alias_dns_portailxapi }}.{{ zone_url }}"
+group_ca_chain: apache
+group_certificate: apache
+group_private_key: apache
+mode_ca_chain: "0644"
+mode_certificate: "0644"
+mode_private_key: "0640"
+# web_service : Choix du type de service exploitant le certificat généré
+# si besoin d'utiliser une pré-configuration ("apache_http", "nginx", "none", "tomcat", "postgresql", "mariadb").
+# Laisser à vide ou à "none" si variable inutilisée.
+web_service: none
+
+#############################################
+##          APACHE - RUCHE                 ##
+##                                         ##
+#############################################
+
+apache_conf_d_files:
+  - traxlrs.conf
+apache_modules:
+  - name: mod_ssl
+apache_ca_certs:
+  - "{{ vault_agent_https_ca_chain }}"
+apache_certs:
+  - "{{ vault_agent_https_cert }}"
+apache_certs_keys:
+  - "{{ vault_agent_https_pk }}"
+mode_apache: "0644"
+
+## Variable configuration PHP
+php_version: '8.3'
+php_fpm_install: true
+php_modules:
+  - php-ctype
+  - php-curl
+  - php-dom
+  - php-fileinfo
+  - php-filter
+  - php-hash
+  - php-mbstring
+  - php-openssl
+  - php-pcre
+  - php-pdo
+  - php-pdo_mysql
+  - php-pdo_pgsql
+  - php-session
+  - php-tokenizer
+  - php-xml
+  - php-cli
+php_webserver_daemon: httpd
+php_ini_path: '/etc'
+
+## Variable configuration .env portailxapi
+app_name: "portailxapi"
+app_env: "production"
+app_debug: "false"
+db_connection: "pgsql"
+# postgres_bdd_portailxapi: "portailxapi"
+# postgres_user_portailxapi: "dboportailxapi"
+db_host: "127.0.0.1"
+
+#####################################################################
+#            Variables cache Laravel                                #
+#####################################################################
+
+portailxapi_cache_files:
+  - "{{ apache_www_path }}/bootstrap/cache/config.php"
+  - "{{ apache_www_path }}/bootstrap/cache/routes-v7.php"
+  - "{{ apache_www_path }}/bootstrap/cache/packages.php"
+  - "{{ apache_www_path }}/bootstrap/cache/services.php"
+  - "{{ apache_www_path }}/bootstrap/cache/events.php"
+
+#####################################################################
+#            Variables tenant observability                         #
+#####################################################################
+
+obs_service: httpd
+obs_role: apache
+obs_beats_modules:
+  - templates/supervision/filebeat/apache.yml
+  - templates/supervision/metricbeat/apache.yml
+
+## Variable et configuration du firewall
+firewalld:
+  - name: "Ouverture du port 80"
+    port: "80/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+  - name: "Ouverture du port 443"
+    port: "443/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+  - name: "Ouverture du port 5432"
+    port: "5432/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+  - name: "Ouverture du port 9200"
+    port: "9200/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"

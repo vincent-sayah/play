@@ -1,0 +1,56 @@
+---
+- name: Gather facts
+  hosts: all
+  gather_facts: true
+  tasks: []
+
+- name: Configure LVM Database
+  hosts: database
+  become: true
+  environment:
+    MINARM_YUM_REPO_NATIONAL_ORIGIN: "{{ minarm_yum_repo_norigin }}"
+    MINARM_ATF_REPO_MIDDLEWARE_BASEURL: "{{ minarm_atf_repo_mbaseurl }}"
+
+  collections:
+    - minarm.lvm
+
+  roles:
+    - role: minarm.lvm.lvm_install
+      tags:
+        - install_lvm_database
+
+- name: Configure Database
+  hosts: postgresql_primary
+  become: true
+  environment:
+    MINARM_YUM_REPO_NATIONAL_ORIGIN: "{{ minarm_yum_repo_norigin }}"
+    MINARM_ATF_REPO_MIDDLEWARE_BASEURL: "{{ minarm_atf_repo_mbaseurl }}"
+
+  collections:
+    - minarm.gds
+    - minarm.postgresql
+    - minarm.firewalld
+
+  pre_tasks:
+    - name: Vérifier si postgresql.conf existe déjà
+      ansible.builtin.stat:
+        path: "{{ postgresql_data_dir }}/postgresql.conf"
+      register: pg_conf_existing
+
+  roles:
+    - role: install_divers
+    - role: minarm.firewalld.firewalld_install
+    - role: minarm.postgresql.postgresql_install
+
+  tasks:
+    - name: Générer le certificat PostgreSQL primary avec Vault
+      ansible.builtin.import_tasks:
+        file: tasks/get_postgresql_vault_cert.yml
+
+    - name: Appliquer TLS PostgreSQL primary
+      ansible.builtin.import_tasks:
+        file: tasks/apply_postgresql_tls.yml
+
+    - name: Configurer PostgreSQL primary
+      ansible.builtin.include_role:
+        name: config_postgres_primary

@@ -1,0 +1,116 @@
+---
+# Ceci est votre inventaire fonctionnel,
+# Dedans doivent se trouver les variables qui conservent la même valeur, peu importe l'environnement (PICSEL ou C1*)
+# Elles ne contiennent ni mot de passe, ni donnée à caractère « sensible », ni secret.
+# Celles-ci peuvent être exportées sans restriction.
+
+ #############################################
+ ##                 MEDUSA                  ##
+ ##                                         ##
+ #############################################
+
+repository_fqdn: "{{ FQDN_BRM_SERVER }}"
+repository_login: "{{ artifactory_user }}"
+repository_password: "{{ artifactory_password }}"
+
+ #############################################
+ ##                 VAULT                   ##
+ ##                                         ##
+ #############################################
+
+## Collection GDS - Role vault_get_secret utilisé pour la connexion à MEDUSA, l'authentification AAP, la récupération des secrets sur GDS
+# Ces variables doivent être définies à vide (Leurs valeurs sont définies par AAP - Information d'identification Vault)
+vault_server_tower_role_id: ""
+vault_server_tower_secret_id: ""
+vault_action: get
+vault_secret_dict: "{{ gds_secret }}"
+vault_tenant: "{{ tenant_gds }}"
+vault_namespace_path: "administration/{{ vault_tenant }}"
+vault_target_namespace_path: "{{ vault_namespace_path }}"
+vault_auth_namespace_path: "{{ vault_namespace_path }}"
+vault_hide_log: true
+# Mettre à false uniquement pour diagnostiquer un problème GDS ; les valeurs de secrets ne doivent pas apparaître dans les logs en cible.
+vault_gds_debug: false
+# Variable obsolète, présente uniquement pour rétrocompatibilité si le rôle déprécié `vault_get_secret` est utilisé
+zone_projet: "{{ tenant_gds }}"
+# Nom de domaine utilisé dans le cadre de la génération des certificats
+vault_server_pki_domain: '{{ zone_url }}'
+
+obs_username_artifactory: "{{ artifactory_user }}"
+obs_password_artifactory: "{{ obs_artifactory_password }}"
+
+## liste des secrets à récupérer de GDS via vault_manage_secret
+gds_secret:
+  artifactory_password: "{{ si_gds }}:artifactory_password"
+  obs_artifactory_password: "{{ si_gds }}:artifactory_password"
+  obs_postgresql_password: "{{ si_gds }}:obs_postgresql_password"
+  obs_postgresql_user: "{{ si_gds }}:obs_postgresql_user"
+  postgresql_unix_account_password: "{{ si_gds }}:postgresql_unix_account_password"
+  postgresql_db_account_password: "{{ si_gds }}:postgresql_db_account_password"
+  traxbdd_user_password: "{{ si_gds }}:traxbdd_user_password"
+  repmgr_user_password: "{{ si_gds }}:repmgr_user_password"
+  elastic_password: "{{ si_gds }}:elastic_password"
+  kibana_password: "{{ si_gds }}:kibana_password"
+  stats_auth_admin: "{{ si_gds }}:stats_auth_admin"
+  obs_apikey_elasticsearch_tenant: "{{ obs_gds }}:obs_apikey_elasticsearch_tenant"
+  obs_apikey_elasticsearch_monitoring: "{{ obs_gds }}:obs_apikey_elasticsearch_monitoring"
+  obs_apikey_service_tenant: "{{ obs_gds }}:obs_apikey_service_tenant"
+  obs_apikey_apm: "{{ obs_gds }}:obs_apikey_apm"
+  kibana_proxy_password: "{{ si_gds }}:kibana_proxy_password"
+  cookie_secret: "{{ si_gds }}:cookie_secret"
+  client_secret_mindefconnect_kib: "{{ si_gds }}:client_secret_mindefconnect_kib"
+  client_secret_mindefconnect_trax: "{{ si_gds }}:client_secret_mindefconnect_trax"
+  client_secret_mindefconnect_portailxapi: "{{ si_gds }}:client_secret_mindefconnect_portailxapi"
+  portailxapi_bd_password: "{{ si_gds }}:portailxapi_bd_password"
+
+#######################################################################
+#                       Variable POSTGRESQL                           #
+#######################################################################
+
+# Variable Postgresql BDD et user bdd trax. Utilisés pour la configuration creation bdd et configuration .env de traxlrs
+postgres_bdd_trax: "trax3"
+postgres_user_trax: "dbotrax3"
+postgresql_port: 5432
+
+# Variable Postgresql BDD repmgr et user bdd repmgr. Utilisés pour la configuration creation bdd et configuration .env de traxlrs
+postgres_bdd_repmgr: "repmgr"
+postgres_user_repmgr: "repl"
+
+# Variable Postgresql BDD et compte postgres pour .pgpass du standby
+postgresql_unix_account: postgres
+postgresql_db_account: postgres
+
+# Variable Postgresql BDD et user bdd portailxapi. Utilisés pour la configuration creation bdd et configuration .env du portailxapi
+postgres_bdd_portailxapi: "portailxapi"
+postgres_user_portailxapi: "dboportailxapi"
+
+#######################################################################
+#                       Variable ELASTICSEARCH                        #
+#######################################################################
+
+## Variable ELASTIC V8.18 pour construire les cert
+es_tmp_dir: "{{ vm_file_path }}es-bootstrap"
+instances_template: "templates/instances.yml.j2"
+
+# Path medusa CA.crt elastic pour hosts: elasticsearch_cluster, haproxy, front et kibana
+# medusa_cert_file_path: "{{ identifiant_zp_repo }}-generic/certificats_es/ca.crt"
+
+#######################################################################
+#                       Variable TENANT OBSERVABILITY                 #
+#######################################################################
+obs_zone_projet: "{{ identifiant_zp_repo | lower }}"
+obs_url_vip_kibana: "https://kibana.{{ suffix_obs }}{{ zone_url }}"
+obs_url_vip_elastic: "https://elastic.{{ suffix_obs }}{{ zone_url }}"
+obs_url_vip_apm: "https://apm.{{ suffix_obs }}{{ zone_url }}:9243"
+obs_url_vip_artifactory: "not used"
+
+obs_domaine: "{{ zone_url }}"
+obs_nom_projet: "{{ nom_si }}"
+obs_environnement: "{{ env_short }}"
+obs_services_to_play:
+  - beats
+  - heartbeat
+  # - supervision
+  # - logstash
+  # - kibana
+  # - otelcol
