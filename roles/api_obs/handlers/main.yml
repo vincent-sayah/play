@@ -1,4 +1,0 @@
-- name: Reload web service
-  ansible.builtin.service:
-    name: "{{ api_obs_service_name }}"
-    state: restarted

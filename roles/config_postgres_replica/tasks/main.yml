@@ -1,8 +1,0 @@
-# création du fichier .pgpass de la vm bdd standby
-- name: Déploiement du fichier .pgpass sur bdd standby
-  template:
-    src: templates/.pgpass.j2
-    dest: /var/lib/pgsql/.pgpass
-    owner: postgres
-    group: postgres
-    mode: '600'

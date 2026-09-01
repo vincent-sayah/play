@@ -1,4 +1,0 @@
----
-elastic_cluster_config_dir: /etc/elasticsearch
-elastic_cluster_env_file: /etc/sysconfig/elasticsearch
-elastic_cluster_service: elasticsearch

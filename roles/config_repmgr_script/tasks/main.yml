@@ -1,8 +1,0 @@
-# script configure_cluster_standby
-- name: Script configure_cluster_standby
-  template:
-    src: templates/configure_cluster_standby.sh.j2
-    dest: /opt/script_cluster_postgres/configure_cluster_standby.sh
-    owner: root
-    group: root
-    mode: '750'

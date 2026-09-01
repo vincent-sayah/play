@@ -1,8 +1,0 @@
-# configuration du fichier check_postgres_handler.sh
-- name: Déploiement script check_postgres_handler.sh
-  template:
-    src: templates/check_postgres_handler.sh.j2
-    dest: /usr/local/bin/check_postgres_handler.sh
-    owner: postgres
-    group: postgres
-    mode: '750'

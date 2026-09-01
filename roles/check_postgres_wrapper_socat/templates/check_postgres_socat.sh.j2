@@ -1,5 +1,0 @@
-#!/bin/bash
-
-while true; do
-  socat TCP-LISTEN:9200,reuseaddr,fork SYSTEM:'/usr/local/bin/check_postgres_handler.sh'
-done
