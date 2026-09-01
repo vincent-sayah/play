@@ -1,0 +1,78 @@
+---
+# - name: Task test
+#   import_playbook: playbooks/test.yml
+#   tags:
+#     - test
+
+############################################################
+#                   playbook XAPI_MN                       #
+############################################################
+- name: Récupération des secrets GDS
+  import_playbook: playbooks/get_gds_secrets.yml
+  tags:
+    - gds-secret
+
+- name: Install primary database Postgresql
+  import_playbook: playbooks/install_primary_db.yml
+  tags:
+    - primary_database
+
+- name: Install replica database Postgresql
+  import_playbook: playbooks/install_replica_db.yml
+  tags:
+    - replica_database
+
+- name: Install repmgr Postgresql
+  import_playbook: playbooks/install_repmgr.yml
+  tags:
+    - repmgr
+
+- name: Install script check postgres
+  import_playbook: playbooks/install_check_postgres.yml
+  tags:
+    - check_postgres
+
+- name: Install Elastic
+  import_playbook: playbooks/install_elastic.yml
+  tags:
+    - Elastic
+
+- name: Install haproxy
+  import_playbook: playbooks/install_haproxy.yml
+  tags:
+    - loadbalancer
+
+- name: Install apache
+  import_playbook: playbooks/install_apache.yml
+  tags:
+    - apache
+
+- name: Install php fpm
+  import_playbook: playbooks/install_php.yml
+  tags:
+    - php
+
+- name: Install Trax
+  import_playbook: playbooks/install_trax.yml
+  tags:
+    - Trax
+
+- name: Install portailxapi
+  import_playbook: playbooks/install_portailxapi.yml
+  tags:
+    - portailxapi
+
+- name: Install kibana
+  import_playbook: playbooks/install_kibana.yml
+  tags:
+    - kibana
+
+- name: Install oauth2
+  import_playbook: playbooks/install_oauth2.yml
+  tags:
+    - oauth2_proxy
+
+- name: Install API et Service observabilite
+  import_playbook: playbooks/install_obs.yml
+  tags:
+    - api_observabilite
