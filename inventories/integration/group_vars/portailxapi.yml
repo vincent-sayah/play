@@ -1,0 +1,7 @@
+---
+
+# Auth portailxapi via Keycloak (OIDC)
+oidc_provider: "keycloak"
+client_id_mindefconnect_portailxapi: "int-xapi-portail-intradef"
+redirect_url_portailxapi: "https://{{ alias_dns_portailxapi }}.{{ zone_url }}/auth/keycloak/callback"
+backend_logout_url_portailxapi: "https://{{ alias_dns_portailxapi }}.{{ zone_url }}/auth/login"

@@ -1,0 +1,7 @@
+# Auth via Keycloak (OIDC)
+provider: "keycloak-oidc"
+client_id_mindefconnect_kib: "int-xapi-mn-kib-intradef"
+redirect_url: "https://{{ alias_dns_kibana }}.{{ zone_url }}/oauth2/callback"
+
+backend_logout_url: "{{ oidc_issuer_url }}/protocol/openid-connect/logout?id_token_hint={id_token}"
+whitelist_domains: ".picsel.defense.gouv.fr"

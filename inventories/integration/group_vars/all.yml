@@ -1,0 +1,127 @@
+---
+# Ceci est votre inventaire technique,
+# Dedans doivent se trouver les variables spécifiques à un environnement (PROD, INTEG, DEV, etc..)
+# et/ou nécessitant de rester à la discrétion de l'infogérance
+# Elles se situent sous inventories/<env> et sont dupliquées pour chacun de ces environnements.
+
+## PREREQUIS AVANT DE RENSEIGNER CE FICHIER
+
+## Accéder à votre tenant MEDUSA
+## Accéder à votre tenant GDS
+## Avoir créé vos machines sur VRA Service Broker
+## Avoir renseigné votre inventaire machine (fichier hosts.yml)
+## Avoir déposé sous MEDUSA les binaires nécessaires à votre SI (par exemple, un dump de votre base de données)
+## Avoir renseigné vos secrets dans GDS
+## Avoir créé votre Alias DNS sur VRA Service Broker
+## Avoir renseigné vos collections dans le fichier collections/requirements.yml
+
+#############################################
+##                 GLOBALES                ##
+##                                         ##
+#############################################
+nom_si: xapi_mn
+trigramme: XPN
+si_gds: ansible
+obs_gds: "observability"
+suffix_obs: "observ."
+tenant: ZPN_XAPI_MN
+# Tenant GDS utilisé par le rôle minarm.gds.vault_manage_secret.
+# Sur C1DR, adapter au format attendu par GDS, par exemple TRIGRAMME-ENVIRONNEMENT.
+tenant_gds: "{{ tenant }}"
+# Cette variable est redondante avec 'tenant' mais cela est volontaire pour le déploiement sur C1NP.
+# Chez C1NP 'tenant' et 'identifiant_zp_repo' sont différents, à l'inverse de sur PICSEL
+identifiant_zp_repo: zpn_xapi_mn
+env_short: dev
+si_version: 1.0.0
+
+#############################################
+##                 A modifier              ##
+##                 Hors picsel             ##
+#############################################
+zone_url: "picsel.defense.gouv.fr" # A modifier hors picsel
+# Alias dns utilisé pour la configuration du serveur web et des certificats
+alias_dns_trax: "integ-xapi-mn" # A modifier hors picsel
+alias_dns_portailxapi: "integ-xapi-portail" # A modifier hors picsel
+alias_dns_kibana: "integ-xapi-kibana"  # A modifier hors picsel
+alias_dns_mindefconnect: "ina" # A modifier hors picsel
+realms: "Intradef"
+oidc_issuer_url: "https://{{ alias_dns_mindefconnect }}.{{ zone_url }}/auth/realms/{{ realms }}"
+
+## Variables environnement du repo minarm
+repository_url: "http://decos-ln.intradef.gouv.fr"
+minarm_yum_repo_norigin: "{{ repository_url }}/repo/"
+minarm_atf_repo_mbaseurl: "{{ repository_url }}/repo-binaires/"
+
+#############################################
+##                 GDS                     ##
+##                                         ##
+#############################################
+## La variable PKI rôle définie le nom du moteur PKI présent dans GDS, sa valeur sera à modifier une fois sur la plateforme cible.
+pki_role: "{{ zone_url }}"
+# Dns du serveur GDS
+vault_fqdn: 'gds.{{ zone_url }}'
+
+#############################################
+##            MEDUSA                       ##
+##                                         ##
+#############################################
+#######
+## VARIABLE obligatoire et utilisée dans le cadre de la promotion des SI
+## FQDN_BRM_SERVER permet de générer un fichier manifest.yml à l'issu de la promotion, indispensable pour lister les binaires utilisées lors du déploiement
+## Il est fortement conseillé de l'assigner à la valeur "medusa.{{ zone_url }}", puis d'utiliser FQDN_BRM_SERVER dans TOUS vos appels au domaine medusa.
+#######
+FQDN_BRM_SERVER: "medusa.{{ zone_url }}"
+artifactory_url: "https://{{ FQDN_BRM_SERVER }}:443"
+artifactory_depot_generic: "{{ artifactory_url }}/artifactory/{{ identifiant_zp_repo }}-generic"
+artifactory_user: "{{ identifiant_zp_repo }}_service_build"
+medusa_url: "{{ artifactory_url }}/artifactory/"
+
+## GET url Médusa
+# Packages placés dans Médusa nécéssaire pour l'architecture TRAX 
+
+# TRAX LRS
+# trax_package: "trax31_openid.tar.gz" # ==> Trax 3.1 avec socialite et openid configuré
+# trax_file_path: "{{ identifiant_zp_repo }}-generic/trax/{{ trax_package }}"
+
+# PORTAIL XAPI file et bdd
+# portailxapi_package: "portailxapi_files.tar.gz"
+# portailxapi_file_path: "{{ identifiant_zp_repo }}-generic/portailxapi/{{ portailxapi_package }}"
+# portailxapi_bdd: "portailxapi_pg.dump"
+# portailxapi_bdd_path: "{{ identifiant_zp_repo }}-generic/portailxapi/{{ portailxapi_bdd }}"
+
+# REPMGR
+# repmgr_package: "repmgr_17-5.5.0-1PGDG.rhel8.x86_64.rpm"
+# repmgr_file_path: "{{ identifiant_zp_repo }}-generic/repmgr/{{ repmgr_package }}"
+
+# Oauth2-proxy V7.15
+# oauth2_tar: "oauth2-proxy-v7.15.3.linux-amd64"
+# oauth2_extension: ".tar.gz"
+# oauth2_medusa_file_path: "{{ identifiant_zp_repo }}-generic/oauth2_proxy/{{ oauth2_tar }}{{ oauth2_extension }}"
+
+## GET url Médusa
+# Certificats placés dans Médusa nécéssaires pour l'architecture TRAX
+
+ca_chain_xapi: "CA_CHAIN_XAPI_MN.crt"
+ca_chain_xapi_file_path: "{{ identifiant_zp_repo }}-generic/certificats/{{ ca_chain_xapi }}"
+
+ # Kibana cert & key
+server_kibana_key: "kibana.key"
+server_kibana_crt: "kibana.crt"
+medusa_kibana_cert_file_path: "{{ identifiant_zp_repo }}-generic/certificats/{{ server_kibana_crt }}"
+medusa_kibana_key_file_path: "{{ identifiant_zp_repo }}-generic/certificats/{{ server_kibana_key }}"
+
+# Path medusa CA.crt elastic -- CA generé par élastic puis placé via curl dans medusa
+ca_elastic: "ca.crt"
+ca_key_elastic: "ca.key"
+medusa_cert_file_path: "{{ identifiant_zp_repo }}-generic/certificats_es/{{ ca_elastic }}"
+medusa_ca_key_file_path: "{{ identifiant_zp_repo }}-generic/certificats_es/{{ ca_key_elastic }}"
+
+  # répertoire de dépot
+vm_file_path: "/tmp/"
+
+#######################################################################
+#               DNS MINDEFCONNECT                             #
+#######################################################################
+# MindefConnect
+# oidc_url: "https://ina.picsel.defense.gouv.fr"
+
