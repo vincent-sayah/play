@@ -116,17 +116,62 @@
     enabled: true
   when: not postgresql_vault_tls_configuration.changed
 
+- name: Attendre que PostgreSQL accepte les connexions TCP locales
+  ansible.builtin.wait_for:
+    host: "127.0.0.1"
+    port: 5432
+    state: started
+    delay: 1
+    timeout: 60
+
 - name: Vérifier que PostgreSQL utilise TLS
   become: true
   become_user: postgres
   ansible.builtin.command:
     argv:
       - "/usr/pgsql-{{ postgresql_pg_major }}/bin/psql"
+      - -h
+      - "127.0.0.1"
+      - -p
+      - "5432"
+      - -U
+      - "{{ postgresql_db_account | default('postgres') }}"
+      - -d
+      - "postgres"
       - -Atqc
       - "SHOW ssl;"
+  environment:
+    PGPASSWORD: "{{ postgresql_db_account_password }}"
   register: postgresql_ssl_status
   changed_when: false
-  failed_when: postgresql_ssl_status.stdout | trim != 'on'
+  failed_when:
+    - postgresql_ssl_status.rc != 0
+    - postgresql_ssl_status.stdout | trim != 'on'
+
+- name: Vérifier que la session de contrôle est réellement chiffrée en TLS
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - "/usr/pgsql-{{ postgresql_pg_major }}/bin/psql"
+      - -h
+      - "127.0.0.1"
+      - -p
+      - "5432"
+      - -U
+      - "{{ postgresql_db_account | default('postgres') }}"
+      - -d
+      - "postgres"
+      - -Atqc
+      - "SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid();"
+  environment:
+    PGPASSWORD: "{{ postgresql_db_account_password }}"
+    PGSSLMODE: require
+  register: postgresql_ssl_session_status
+  changed_when: false
+  failed_when:
+    - postgresql_ssl_session_status.rc != 0
+    - postgresql_ssl_session_status.stdout | trim != 't'
 
 - name: Vérifier que Vault Agent est actif
   ansible.builtin.command:
