@@ -1,0 +1,34 @@
+---
+# chemins relatifs pour l'API, par rapport à la variable api_obs_website_main_path
+api_obs_archive_path: "{{ api_obs_website_main_path }}/api_health.zip"
+api_obs_health_path: "{{ api_obs_website_main_path }}/api_health"
+
+# liste des templates de configuration
+api_obs_configuration_templates:
+  - {name: ".env.yml", path: ".env.yml"}
+  - {name: "{{ api_obs_service_file_name }}", path: "{{ api_obs_service_file_path }}"}
+  - {name: "{{ api_obs_info_file_name }}", path: "{{ api_obs_info_file_path }}"}
+
+
+# variables pour la vérification des paramètres de configuration
+api_obs_meta_string: "La variable de métadonnée obligatoire"
+api_obs_empty_dico_tip: "définir un dictionnaire vide : {}"
+
+
+api_obs_configuration_variables_to_check:
+  - { name: "nom", msg: "{{ api_obs_meta_string }} 'nom' est manquante.\n"}
+  - { name: "trigramme", msg: "{{ api_obs_meta_string }} 'trigramme' est manquante.\n"}
+  - { name: "version", msg: "{{ api_obs_meta_string }} 'version' est manquante.\n"}
+  - { name: "date_version", msg: "{{ api_obs_meta_string }} 'date_version' est manquante.\n"}
+  - { name: "environnement", msg: "{{ api_obs_meta_string }} 'environnement' est manquante.\n"}
+  - { name: "classification_max_donnees", msg: "{{ api_obs_meta_string }} 'classification_max_donnees' est manquante.\n"}
+  - { name: "mentions", msg: "{{ api_obs_meta_string }} 'mentions' est manquante.\n"}
+  - { name: "niveau_arr", msg: "{{ api_obs_meta_string }} 'niveau_arr' est manquante.\n"}
+  - { name: "niveau_service", msg: "{{ api_obs_meta_string }} 'niveau_service' est manquante.\n"}
+  - { name: "type_homologation", msg: "{{ api_obs_meta_string }} 'type_homologation' est manquante.\n"}
+  - { name: "date_fin_homologation", msg: "{{ api_obs_meta_string }} 'date_fin_homologation' est manquante.\n"}
+  - { name: "direction_systeme_information", msg: "{{ api_obs_meta_string }} 'direction_systeme_information' est manquante.\n"}
+  - { name: "direction_application", msg: "{{ api_obs_meta_string }} 'direction_application' est manquante.\n"}
+  - { name: "services_api_obs", msg: "La variable 'services_api_obs' n'est pas définie."}
+
+api_obs_meta_file_name: composer.json # nom du fichier contenant les métadonnées relatives à l'API

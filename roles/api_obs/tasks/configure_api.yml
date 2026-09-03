@@ -1,0 +1,23 @@
+---
+- name: Put aliases into the web server configuration
+  ansible.builtin.template:
+    src: "templates/health_alias.conf.j2"
+    dest: /etc/httpd/conf.d/api_obs_php_alias.conf
+    owner: "{{ api_obs_application_owner }}"
+    group: "{{ api_obs_application_owner }}"
+    mode: "0755"
+  notify: Reload web service
+
+# récupère des valeurs de variable pour les fichiers de configuration
+- name: Get values from meta file
+  ansible.builtin.include_tasks: read_meta_file.yml
+
+# Peuple les fichiers de configuration de l'API
+- name: Create configuration files from templates
+  ansible.builtin.template:
+    src: "templates/{{ item.name }}.j2"
+    dest: "{{ api_obs_health_path }}/{{ item.path }}"
+    owner: "{{ api_obs_application_owner }}"
+    group: "{{ api_obs_application_owner }}"
+    mode: "0755"
+  loop: "{{ api_obs_configuration_templates }}"

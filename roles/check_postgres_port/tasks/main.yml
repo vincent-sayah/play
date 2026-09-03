@@ -1,0 +1,12 @@
+- name: Autoriser 9200/tcp pour http_port_t (idempotent)
+  become: true
+  community.general.seport:
+    ports: 9200
+    proto: tcp
+    setype: http_port_t
+    state: present
+
+
+- name: Confirmer la configuration SELinux du port 9200
+  ansible.builtin.debug:
+    msg: "Le port 9200/tcp est autorisé avec le type SELinux http_port_t."

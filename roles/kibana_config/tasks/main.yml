@@ -1,0 +1,153 @@
+---
+
+#####################################################################
+# Répertoire des certificats spécifiques à Kibana
+#
+# Ce répertoire ne contient plus le certificat serveur Kibana.
+#
+# Le certificat serveur est directement utilisé depuis :
+#
+# /etc/pki/tls/certs/
+#
+# Ce répertoire contient principalement la CA Elasticsearch.
+#####################################################################
+
+- name: Création repertoire certs
+  ansible.builtin.file:
+    path: "{{ kibana_certs_dir }}"
+    state: directory
+    owner: kibana
+    group: kibana
+    mode: "0750"
+
+#####################################################################
+# CA ELASTICSEARCH
+#
+# Utilisée uniquement pour :
+#
+# Kibana -> Elasticsearch
+#####################################################################
+
+- name: Deploy Elasticsearch CA de /tmp/
+  ansible.builtin.copy:
+    src: "{{ kibana_elasticsearch_ca_src }}"
+    dest: "{{ kibana_elasticsearch_ca_path }}"
+    owner: kibana
+    group: kibana
+    mode: "0644"
+    remote_src: true
+  when:
+    - kibana_elasticsearch_ca_src | length > 0
+
+#####################################################################
+# Ajout CA Elasticsearch au trust store système
+#####################################################################
+
+- name: Copier la CA d'Elasticsearch dans /etc/pki/ca-trust/source/anchors
+  ansible.builtin.copy:
+    src: "{{ kibana_elasticsearch_ca_src }}"
+    dest: "/etc/pki/ca-trust/source/anchors/{{ kibana_elasticsearch_ca_src | basename }}"
+    owner: root
+    group: root
+    mode: "0644"
+    remote_src: true
+  when:
+    - kibana_elasticsearch_ca_src | length > 0
+  notify:
+    - Mettre à jour le magasin CA
+
+#####################################################################
+# VERIFICATION CERTIFICAT VAULT
+#####################################################################
+
+- name: Vérifier la présence du certificat Vault Kibana
+  ansible.builtin.stat:
+    path: "{{ vault_agent_https_cert }}"
+  register: kibana_vault_cert_stat
+
+- name: Vérifier la présence de la clé privée Vault Kibana
+  ansible.builtin.stat:
+    path: "{{ vault_agent_https_pk }}"
+  register: kibana_vault_key_stat
+
+- name: Vérifier les fichiers Vault Kibana
+  ansible.builtin.assert:
+    that:
+      - kibana_vault_cert_stat.stat.exists
+      - kibana_vault_key_stat.stat.exists
+
+    fail_msg: >-
+      Le certificat ou la clé privée Vault Kibana
+      n'a pas été trouvé.
+
+    success_msg: >-
+      Le certificat et la clé privée Vault Kibana
+      sont présents.
+
+#####################################################################
+# PERMISSIONS CLE PRIVEE
+#####################################################################
+
+- name: Appliquer les permissions sur la clé privée Vault Kibana
+  ansible.builtin.file:
+    path: "{{ vault_agent_https_pk }}"
+    owner: root
+    group: kibana
+    mode: "0640"
+
+#####################################################################
+# CONFIGURATION KIBANA
+#####################################################################
+
+- name: Render /etc/kibana/kibana.yml
+  ansible.builtin.template:
+    src: kibana.yml.j2
+    dest: "{{ kibana_config_path }}"
+    owner: root
+    group: kibana
+    mode: "0640"
+  notify:
+    - Restart Kibana
+
+#####################################################################
+# SELINUX
+#####################################################################
+
+- name: Lister les booleans SELinux disponibles
+  ansible.builtin.command:
+    cmd: getsebool -a
+  register: selinux_bools
+  changed_when: false
+
+- name: Activer SELinux httpd_can_network_connect
+  ansible.posix.seboolean:
+    name: httpd_can_network_connect
+    state: true
+    persistent: true
+
+- name: Activer SELinux httpd_can_network_connect_ssl si disponible
+  ansible.posix.seboolean:
+    name: httpd_can_network_connect_ssl
+    state: true
+    persistent: true
+  when:
+    - "'httpd_can_network_connect_ssl' in selinux_bools.stdout"
+
+#####################################################################
+# /etc/hosts
+#####################################################################
+
+- name: Ajouter l'entrée DNS Kibana dans /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: >-
+      ^.*[[:space:]]{{ alias_dns_kibana | regex_escape() }}\.{{ zone_url | regex_escape() }}([[:space:]]|$)
+    line: >-
+      {{ ansible_facts['default_ipv4']['address'] }}
+      {{ alias_dns_kibana }}.{{ zone_url }}
+    state: present
+    insertafter: EOF
+    create: false
+    owner: root
+    group: root
+    mode: "0644"

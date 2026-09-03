@@ -1,0 +1,29 @@
+## copier GPG-KEY-elasticsearch de medusa dans fichier /tmp
+- name: Récupération du fichier GPG-KEY-elasticsearch dépôt sur la VM dans /tmp/
+  minarm.core.adaptable.get_url:
+    url: "atf://{{ elastic_GPG_medusa_file_path }}"
+    dest: "{{ vm_file_path }}"
+    url_category: "livrable"
+    username: "{{ artifactory_user }}"
+    password: "{{ artifactory_password }}"
+
+## Déployer et importer la cle GPG elastic pour permettre son installation
+- name: S'assurer que le répertoire des clés existe
+  become: true
+  ansible.builtin.file:
+    path: /etc/pki/rpm-gpg
+    state: directory
+    mode: "0755"
+
+- name: Déployer la clé GPG d'Elastic (depuis le remote /tmp)
+  become: true
+  ansible.builtin.copy:
+    src: "{{ vm_file_path }}GPG-KEY-elasticsearch"
+    dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-elasticsearch
+    mode: "0644"
+    remote_src: true
+- name: Importer la clé GPG d'Elastic
+  become: true
+  ansible.builtin.rpm_key:
+    state: present
+    key: /etc/pki/rpm-gpg/RPM-GPG-KEY-elasticsearch

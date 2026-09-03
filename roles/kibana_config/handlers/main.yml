@@ -1,0 +1,11 @@
+---
+
+- name: Restart Kibana
+  ansible.builtin.systemd:
+    name: kibana
+    state: restarted
+
+- name: Mettre à jour le magasin CA
+  ansible.builtin.command:
+    cmd: update-ca-trust extract
+  changed_when: true

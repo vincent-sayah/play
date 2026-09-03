@@ -1,0 +1,8 @@
+---
+- name: Création du répertoire DocumentRoot
+  file:
+    path: "{{ apache_www_path }}"
+    state: directory
+    mode: '0755'
+    owner: apache
+    group: apache

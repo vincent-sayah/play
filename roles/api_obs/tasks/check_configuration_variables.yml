@@ -1,0 +1,26 @@
+---
+- name: Vérification de présence des variables de configuration
+  set_fact:
+    missing_variables_message: "{{ missing_variables_message | default('') + item.msg }}"
+  when: variable_is_absent
+  vars:
+    variable_is_absent: "{{ lookup('vars', item.name, default='') == '' }}" # La variable est manquante
+  with_items: "{{ api_obs_configuration_variables_to_check }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# yamllint disable rule:line-length
+- name: Debug
+  debug:
+    msg: "{{ (missing_variables_message + 'Veuillez renseigner ces variables avant de pouvoir déployer cette API, comme décrit dans la documentation.').split('\n') }}"
+  when: missing_variables_message is defined
+
+- name: Arrêt de l'exécution si certaines variables sont manquantes
+  fail:
+    msg: "Veuillez renseigner ces variables avant de pouvoir déployer cette API, comme décrit dans la documentation."
+  when: missing_variables_message is defined
+
+- name: Debug
+  debug:
+    msg: "Les variables de configuration sont correctement renseignées."
+  when: missing_variables_message is undefined

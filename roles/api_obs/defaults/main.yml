@@ -1,0 +1,34 @@
+---
+# credentials pour télécharger l'archive de l'application sur Artifactory
+api_obs_health_artifactory_username: "{{ artifactory_user }}"
+api_obs_health_artifactory_password: "{{ artifactory_password }}"
+
+api_obs_health_version: 1.0.3
+api_obs_health_binary: api_health_{{ api_obs_health_version }}.zip
+
+# Ancienne variable utilisée pour le chemin vers l'api health sur medusa, dû à l'artifactory C1NP.
+# Celle-ci doit être définie coté SI, en utilisant "identifiant_zp_repo"-generic pour C1NP et commun-generic pour PICSEL
+# api_obs_repository_downloads_path: artifactory/commun-generic/download/health
+
+# Emplacement par défaut de l'archive de l'API
+api_obs_health_archive_url: "{{ repository_downloads_path_for_api_observability }}/{{ api_obs_health_binary }}"
+
+api_obs_website_main_path: /var/www/html
+api_obs_application_owner: apache
+api_obs_service_name: httpd
+api_obs_website_port: 80
+
+# chemins et noms des fichiers de configuration depuis la racine de l'API
+api_obs_info_file_name: observability.si.yml
+api_obs_service_file_name: services.si.yml
+api_obs_info_file_path: "./{{ api_obs_info_file_name }}"
+api_obs_service_file_path: "./{{ api_obs_service_file_name }}"
+
+# Url par défaut des endpoints health et info
+api_obs_health_alias_url: "/v1/api/observability/health"
+api_obs_info_alias_url: "/v1/api/observability/info"
+
+## Variables de remplissage du fichier services.si.yml
+api_obs_service_maintenance_keyword: 'site en maintenance' # texte à chercher dans la page renvoyée lorsque le site est en maintenance
+
+api_obs_version_api: '1.0.3'

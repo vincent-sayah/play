@@ -1,0 +1,46 @@
+---
+
+# Création du role kb_proxy_runas
+- name: Ensure kb_proxy_runas role exists in Elasticsearch
+  become: true
+  ansible.builtin.uri:
+    url: "https://{{ hostvars[(groups['node1'] | first)].ansible_host }}:9200/_security/role/{{ role_kibana_runas }}"
+    method: POST
+    body_format: json
+    body:
+      run_as:
+        - "*"
+      metadata:
+        desc: "Allow kibana-proxy to run_as end users"
+    url_username: "elastic"
+    url_password: "{{ elastic_password }}"
+    force_basic_auth: true
+    validate_certs: true
+    ca_path: "{{ kibana_certs_dir }}/{{ ca_elastic }}"
+    status_code:
+      - 200
+      - 201
+
+# Création du user kibana-proxy
+- name: Ensure kibana-proxy user exists in Elasticsearch
+  become: true
+  ansible.builtin.uri:
+    url: "https://{{ hostvars[(groups['node1'] | first)].ansible_host }}:9200/_security/user/{{ user_kibana_proxy }}"
+    method: POST
+    body_format: json
+    body:
+      password: "{{ kibana_proxy_password }}"
+      roles:
+        - "kibana_read_only"
+        - "{{ role_kibana_runas }}"
+      full_name: "Kibana via oauth2-proxy"
+      email: "no-reply@example.local"
+      enabled: true
+    url_username: "elastic"
+    url_password: "{{ elastic_password }}"
+    force_basic_auth: true
+    validate_certs: true
+    ca_path: "{{ kibana_certs_dir }}/{{ ca_elastic }}"
+    status_code:
+      - 200
+      - 201

@@ -1,0 +1,11 @@
+[Unit]
+Description=Serveur HTTP pour statut PostgreSQL
+After=network.target postgresql.service
+
+[Service]
+ExecStart=/usr/local/bin/check_postgres_socat.sh
+Restart=always
+User=postgres
+
+[Install]
+WantedBy=multi-user.target

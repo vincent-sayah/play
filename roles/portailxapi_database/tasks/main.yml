@@ -1,0 +1,37 @@
+- name: Récupération du fichier portailxapi_pg.dump et dépôt sur la VM
+  minarm.core.adaptable.get_url:
+    url: "atf://{{ portailxapi_bdd_path }}"
+    dest: "{{ vm_file_path }}"
+    url_category: "livrable"
+    username: "{{ artifactory_user }}"
+    password: "{{ artifactory_password }}"
+
+- name: Restaurer le dump portailxapi sans reprendre l'ancien owner
+  ansible.builtin.command:
+    argv:
+      - pg_restore
+      - --host=localhost
+      - --username=dboportailxapi
+      - --dbname=portailxapi
+      - --clean
+      - --if-exists
+      - --no-owner
+      - --no-acl
+      - "{{ vm_file_path }}{{ portailxapi_bdd }}"
+  environment:
+    PGPASSWORD: "{{ portailxapi_bd_password }}"
+ # no_log: true
+  changed_when: true
+
+- name: Donner les droits à l'user bdd sur le schéma public
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    login_db: "{{ postgres_bdd_portailxapi }}"
+    query: |
+      ALTER SCHEMA public OWNER TO "{{ postgres_user_portailxapi }}";
+      GRANT ALL PRIVILEGES ON DATABASE "{{ postgres_bdd_portailxapi }}" TO "{{ postgres_user_portailxapi }}";
+      GRANT ALL PRIVILEGES ON SCHEMA public TO "{{ postgres_user_portailxapi }}";
+      GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "{{ postgres_user_portailxapi }}";
+      GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "{{ postgres_user_portailxapi }}";
+      GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO "{{ postgres_user_portailxapi }}";

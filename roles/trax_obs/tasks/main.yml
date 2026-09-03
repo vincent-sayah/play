@@ -1,0 +1,28 @@
+---
+
+# Modification de route/web.php pour ajouter la route /vx/api/observability/info
+- name: Modification web.php de trax pour prendre en compte obs info
+  ansible.builtin.template:
+    src: web.php.j2
+    dest: "{{ apache_www_path }}/routes/web.php"
+    owner: root
+    group: root
+    mode: "0775"
+
+- name: Clear Laravel route cache
+  ansible.builtin.command: php artisan route:clear
+  args:
+    chdir: "{{ apache_www_path }}"
+  changed_when: false
+
+- name: Clear Laravel config cache
+  ansible.builtin.command: php artisan config:clear
+  args:
+    chdir: "{{ apache_www_path }}"
+  changed_when: false
+
+- name: Clear Laravel application cache
+  ansible.builtin.command: php artisan cache:clear
+  args:
+    chdir: "{{ apache_www_path }}"
+  changed_when: false

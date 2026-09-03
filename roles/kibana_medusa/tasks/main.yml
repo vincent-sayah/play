@@ -1,0 +1,26 @@
+---
+
+#####################################################################
+# Récupération de la CA Elasticsearch depuis Médusa
+#
+# Les certificats serveur Kibana ne sont PLUS récupérés depuis Médusa.
+#
+# Le certificat et la clé Kibana sont maintenant générés
+# directement par GDS / Vault.
+#
+# Ce rôle ne récupère donc plus que :
+#
+#   ca.crt
+#
+# qui sert exclusivement aux communications :
+#
+# Kibana -> Elasticsearch
+#####################################################################
+
+- name: Récupération du CA Elasticsearch et dépôt sur la VM dans /tmp/
+  minarm.core.adaptable.get_url:
+    url: "atf://{{ medusa_cert_file_path }}"
+    dest: "{{ vm_file_path }}"
+    url_category: "livrable"
+    username: "{{ artifactory_user }}"
+    password: "{{ artifactory_password }}"

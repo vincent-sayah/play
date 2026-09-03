@@ -1,0 +1,11 @@
+- name: Récupérer les certificats postgres pg2 de medusa et copie dans /tmp
+  minarm.core.adaptable.get_url:
+    url: "atf://{{ item }}"
+    dest: "{{ vm_file_path }}"
+    url_category: "livrable"
+    username: "{{ artifactory_user }}"
+    password: "{{ artifactory_password }}"
+  loop:
+    - "{{ ca_chain_xapi_file_path }}"
+    - "{{ server_pg2_key_file_path }}"
+    - "{{ server_pg2_crt_file_path }}"
