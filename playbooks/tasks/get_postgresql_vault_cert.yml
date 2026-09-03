@@ -1,36 +1,38 @@
 ---
+
 - name: Calculer le CN Vault attendu pour PostgreSQL
   ansible.builtin.set_fact:
     postgresql_vault_expected_cn: "{{ ansible_host | lower }}"
 
+
 - name: Forcer les paramètres du certificat PostgreSQL
   ansible.builtin.set_fact:
     vault_agent_https_cn: "{{ postgresql_vault_expected_cn }}"
-
     vault_agent_https_sans:
       - "{{ postgresql_vault_expected_cn }}"
-
     vault_agent_https_cert: >-
       {{ postgresql_ssl_dir }}/{{ postgresql_vault_expected_cn }}.pem
-
     vault_agent_https_pk: >-
       {{ postgresql_ssl_dir }}/{{ postgresql_vault_expected_cn }}.key
-
     vault_agent_https_ca_chain: >-
       {{ postgresql_ssl_dir }}/{{ postgresql_vault_expected_cn }}_ca_chain.pem
-
     postgresql_ssl_ca_file: >-
       {{ postgresql_ssl_dir }}/{{ postgresql_vault_expected_cn }}_ca_chain.pem
-
     postgresql_ssl_server_cert_file: >-
       {{ postgresql_ssl_dir }}/{{ postgresql_vault_expected_cn }}.pem
-
     postgresql_ssl_server_key_file: >-
       {{ postgresql_ssl_dir }}/{{ postgresql_vault_expected_cn }}.key
 
     web_service: none
 
-    agent_command: "if /usr/bin/systemctl is-active --quiet postgresql-{{ postgresql_pg_major }}; then sudo /usr/bin/systemctl reload postgresql-{{ postgresql_pg_major }}; else /bin/true; fi"
+    agent_command: >-
+      if /usr/bin/systemctl is-active --quiet
+      postgresql-{{ postgresql_pg_major }};
+      then sudo /usr/bin/systemctl reload
+      postgresql-{{ postgresql_pg_major }};
+      else /bin/true;
+      fi
+
 
 - name: Vérifier les paramètres Vault PostgreSQL
   ansible.builtin.assert:
@@ -38,13 +40,16 @@
       - vault_agent_https_cn == postgresql_vault_expected_cn
       - postgresql_vault_expected_cn in vault_agent_https_sans
       - web_service == 'none'
+
     fail_msg: >-
       Les paramètres Vault PostgreSQL sont incorrects.
       CN effectif={{ vault_agent_https_cn }},
       CN attendu={{ postgresql_vault_expected_cn }}.
+
     success_msg: >-
       Le CN Vault PostgreSQL est correctement défini :
       {{ vault_agent_https_cn }}
+
 
 - name: Afficher les chemins TLS PostgreSQL
   ansible.builtin.debug:
@@ -54,6 +59,7 @@
       - "Clé={{ vault_agent_https_pk }}"
       - "Chaîne={{ vault_agent_https_ca_chain }}"
 
+
 - name: Créer le répertoire SSL PostgreSQL
   ansible.builtin.file:
     path: "{{ postgresql_ssl_dir }}"
@@ -61,6 +67,7 @@
     owner: postgres
     group: postgres
     mode: "0700"
+
 
 - name: Configurer Vault Agent pour PostgreSQL
   ansible.builtin.include_role:
@@ -70,9 +77,11 @@
   ansible.builtin.stat:
     path: "{{ item }}"
   loop:
+
     - "{{ vault_agent_https_cert }}"
     - "{{ vault_agent_https_pk }}"
     - "{{ vault_agent_https_ca_chain }}"
+
   register: postgresql_vault_files_before_render
 
 - name: Redémarrer Vault Agent si les fichiers doivent être générés
@@ -86,3 +95,18 @@
     | selectattr('stat.exists', 'equalto', false)
     | list
     | length > 0
+
+
+# Important :
+# pendant un repmgr standby clone, Vault Agent est arrêté pour éviter
+# qu'il recrée {{ postgresql_ssl_dir }} pendant pg_basebackup.
+#
+# Cette tâche garantit qu'il est de nouveau actif après configuration,
+# même si les fichiers étaient déjà présents.
+
+- name: S'assurer que Vault Agent est actif
+  ansible.builtin.systemd:
+    name: vault-agent
+    state: started
+    enabled: true
+    daemon_reload: true
