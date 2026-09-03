@@ -25,12 +25,18 @@ postgres_bdd_repmgr: "repmgr"
 #                    REPMGR / STANDBY                               #
 #####################################################################
 
-# Par défaut, un standby déjà initialisé n'est PAS recloné.
+# Comportement normal :
 #
-# Un clone est effectué automatiquement si :
+# - si PG_VERSION est absent :
+#       db2 doit être cloné depuis db1
 #
-# - PG_VERSION est absent
-# - standby.signal est absent
+# - si PG_VERSION est présent :
+#       db2 est considéré comme déjà initialisé
+#       et son PGDATA n'est surtout PAS détruit.
+#
+# Le rôle standby sera ensuite vérifié avec :
+#
+# SELECT pg_is_in_recovery();
 #
 # Pour forcer volontairement une reconstruction complète de db2 :
 #
@@ -48,12 +54,15 @@ repmgr_force_standby_clone: false
 db_port: "5432"
 obs_service: postgresql-17
 obs_role: postgresql_standby
+
 obs_beats_modules:
   - templates/supervision/filebeat/postgresql.yml
   - templates/supervision/metricbeat/postgresql.yml
 
 
-## Ouverture des ports nécessaires pour le groupe database
+#####################################################################
+# FIREWALL
+#####################################################################
 
 firewalld:
 
