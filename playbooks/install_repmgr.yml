@@ -1,12 +1,18 @@
 ---
-## copier le rpm repmgr de medusa dans fichier /tmp
-## installer localement repmgr
-## donner les droits d'execution du binaire repmgr
+#####################################################################
+# INSTALLATION ET CONFIGURATION REPMGR
+#####################################################################
+
+
+#####################################################################
+# FACTS
+#####################################################################
 
 - name: Gather facts
   hosts: all
   gather_facts: true
   tasks: []
+
 
 #####################################################################
 # INSTALLATION REPMGR
@@ -27,13 +33,13 @@
 
 
 #####################################################################
-# CONFIGURATION PRIMARY
+# CONFIGURATION REPMGR PRIMARY
 #####################################################################
 
 - name: Configuration repmgr.conf primary
   hosts: postgresql_primary
   become: true
-  
+
   collections:
     - minarm.gds
 
@@ -42,7 +48,7 @@
 
 
 #####################################################################
-# CONFIGURATION STANDBY
+# CONFIGURATION REPMGR STANDBY
 #####################################################################
 
 - name: Configuration repmgr.conf standby
@@ -54,6 +60,86 @@
 
   roles:
     - role: config_repmgr_standby
+
+
+#####################################################################
+# CALCUL DES IP REPMGR
+#####################################################################
+
+- name: Calculer les adresses PostgreSQL utilisées par repmgr
+  hosts: database
+  become: true
+
+  tasks:
+
+    - name: Calculer IP primary et standby
+      ansible.builtin.set_fact:
+
+        repmgr_primary_ip: >-
+          {{
+            (
+              hostvars[
+                groups['postgresql_primary'][0]
+              ]['ansible_facts']['default_ipv4']['address']
+              |
+              default(
+                hostvars[
+                  groups['postgresql_primary'][0]
+                ]['ansible_default_ipv4']['address']
+              )
+            )
+            | mandatory
+          }}
+
+        repmgr_standby_ip: >-
+          {{
+            (
+              hostvars[
+                groups['postgresql_replica'][0]
+              ]['ansible_facts']['default_ipv4']['address']
+              |
+              default(
+                hostvars[
+                  groups['postgresql_replica'][0]
+                ]['ansible_default_ipv4']['address']
+              )
+            )
+            | mandatory
+          }}
+
+    - name: Afficher les adresses utilisées par repmgr
+      ansible.builtin.debug:
+        msg:
+          - "Primary={{ repmgr_primary_ip }}"
+          - "Standby={{ repmgr_standby_ip }}"
+
+
+#####################################################################
+# .PGPASS REPMGR
+#
+# repmgr.conf utilise l'adresse IP des nœuds PostgreSQL.
+# Le compte postgres doit donc disposer des credentials repmgr/repl.
+#####################################################################
+
+- name: Configurer le fichier pgpass repmgr
+  hosts: database
+  become: true
+
+  tasks:
+
+    - name: Créer le fichier .pgpass utilisé par repmgr
+      ansible.builtin.copy:
+        dest: /var/lib/pgsql/.pgpass
+        owner: postgres
+        group: postgres
+        mode: "0600"
+        content: |
+          {{ repmgr_primary_ip }}:{{ postgresql_port }}:{{ postgres_bdd_repmgr }}:{{ postgres_user_repmgr }}:{{ repmgr_user_password }}
+          {{ repmgr_standby_ip }}:{{ postgresql_port }}:{{ postgres_bdd_repmgr }}:{{ postgres_user_repmgr }}:{{ repmgr_user_password }}
+          127.0.0.1:{{ postgresql_port }}:{{ postgres_bdd_repmgr }}:{{ postgres_user_repmgr }}:{{ repmgr_user_password }}
+          {{ repmgr_primary_ip }}:{{ postgresql_port }}:replication:{{ postgres_user_repmgr }}:{{ repmgr_user_password }}
+          {{ repmgr_standby_ip }}:{{ postgresql_port }}:replication:{{ postgres_user_repmgr }}:{{ repmgr_user_password }}
+      no_log: true
 
 
 #####################################################################
@@ -72,25 +158,73 @@
         state: touch
         owner: postgres
         group: postgres
-        mode: '0640'
+        mode: "0640"
         modification_time: preserve
         access_time: preserve
 
-    - name: Contexte SELinux adapté pour un fichier de log
+    - name: Contexte SELinux adapté pour le log repmgr
       ansible.builtin.file:
         path: /var/log/repmgr.log
         setype: var_log_t
 
-    - name: Modification proprietaire log file repmgr
+    - name: Garantir les permissions du log repmgr
       ansible.builtin.file:
         path: /var/log/repmgr.log
         owner: postgres
         group: postgres
+        mode: "0640"
 
-    - name: Modification permissions repmgr log
-      ansible.builtin.file:
-        path: /var/log/repmgr.log
-        mode: '0640'
+
+#####################################################################
+# PRIMARY : VERIFICATION POSTGRESQL
+#####################################################################
+
+- name: Vérifier PostgreSQL primary avant enregistrement repmgr
+  hosts: postgresql_primary
+  become: true
+
+  tasks:
+
+    - name: S'assurer que PostgreSQL primary est démarré
+      ansible.builtin.systemd:
+        name: postgresql-17
+        state: started
+        enabled: true
+
+    - name: Attendre PostgreSQL primary sur 5432
+      ansible.builtin.wait_for:
+        host: "127.0.0.1"
+        port: 5432
+        state: started
+        delay: 1
+        timeout: 60
+
+    - name: Vérifier la connexion repl vers la base repmgr du primary
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - /usr/pgsql-17/bin/psql
+          - -h
+          - "{{ repmgr_primary_ip }}"
+          - -p
+          - "{{ postgresql_port | string }}"
+          - -U
+          - "{{ postgres_user_repmgr }}"
+          - -d
+          - "{{ postgres_bdd_repmgr }}"
+          - -Atqc
+          - "SELECT 1;"
+      environment:
+        PGPASSFILE: /var/lib/pgsql/.pgpass
+      register: repmgr_primary_connection
+      changed_when: false
+      retries: 10
+      delay: 3
+      until:
+        - repmgr_primary_connection.rc == 0
+        - repmgr_primary_connection.stdout | trim == "1"
+
 
 #####################################################################
 # ENREGISTREMENT PRIMARY
@@ -102,24 +236,23 @@
 
   tasks:
 
-    - name: Vérifier si le nœud primary est déjà enregistré
+    - name: Vérifier si le primary est déjà enregistré
       become: true
       become_user: postgres
-
       ansible.builtin.command:
-
         argv:
           - /usr/pgsql-17/bin/repmgr
           - -f
           - /etc/repmgr/17/repmgr.conf
           - node
           - status
-
+      environment:
+        PGPASSFILE: /var/lib/pgsql/.pgpass
       register: repmgr_primary_status
       changed_when: false
       failed_when: false
 
-    - name: Enregistrer le nœud primaire uniquement si nécessaire
+    - name: Enregistrer le primary si nécessaire
       become: true
       become_user: postgres
       ansible.builtin.command:
@@ -130,17 +263,26 @@
           - primary
           - register
           - -F
+      environment:
+        PGPASSFILE: /var/lib/pgsql/.pgpass
       when: >-
         repmgr_primary_status.rc != 0
         or
         'not registered'
         in
-        (repmgr_primary_status.stdout | lower)
+        (
+          (
+            repmgr_primary_status.stdout
+            ~
+            repmgr_primary_status.stderr
+          )
+          | lower
+        )
       changed_when: true
 
 
 #####################################################################
-# PREPARATION STANDBY
+# DETERMINER SI DB2 DOIT ETRE CLONE
 #####################################################################
 
 - name: Déterminer si db2 doit être cloné
@@ -159,18 +301,16 @@
         path: "{{ postgresql_data_dir }}/standby.signal"
       register: repmgr_standby_signal
 
-    - name: Déterminer si un clonage du standby est nécessaire
+    - name: Déterminer si un clone de db2 est nécessaire
       ansible.builtin.set_fact:
         repmgr_standby_clone_required: >-
           {{
             (repmgr_force_standby_clone | default(false) | bool)
             or
             (not repmgr_standby_pg_version.stat.exists)
-            or
-            (not repmgr_standby_signal.stat.exists)
           }}
 
-    - name: Afficher la décision de clonage du standby
+    - name: Afficher la décision de clonage
       ansible.builtin.debug:
         msg:
           - "PG_VERSION présent={{ repmgr_standby_pg_version.stat.exists }}"
@@ -178,231 +318,188 @@
           - "force clone={{ repmgr_force_standby_clone | default(false) | bool }}"
           - "clone nécessaire={{ repmgr_standby_clone_required }}"
 
+
 #####################################################################
-# CLONAGE STANDBY
+# PREPARATION ET CLONE DB2
 #####################################################################
 
-- name: Cloner le serveur standby si nécessaire
+- name: Préparer et éventuellement cloner db2
   hosts: postgresql_replica
   become: true
 
   tasks:
 
     #################################################################
-    # Récupération de l'état des services
+    # SERVICES
     #################################################################
 
-    - name: Collecter les services présents sur db2
+    - name: Collecter les services de db2
       ansible.builtin.service_facts:
 
-      when:
-        - repmgr_standby_clone_required | bool
-
-
-    #################################################################
-    # Arrêt des services pouvant interférer avec le clone
-    #################################################################
-
-    - name: Stopper repmgrd sur db2 avant clonage
+    - name: Stopper repmgr avant reclonage
       ansible.builtin.systemd:
         name: repmgr-17
         state: stopped
-
       when:
         - repmgr_standby_clone_required | bool
         - "'repmgr-17.service' in ansible_facts.services"
 
-    - name: Stopper PostgreSQL 17 sur db2 avant clonage
+    - name: Stopper PostgreSQL avant reclonage
       ansible.builtin.systemd:
         name: postgresql-17
         state: stopped
-
       when:
         - repmgr_standby_clone_required | bool
 
-
     #################################################################
-    # CRITIQUE :
+    # VAULT AGENT
     #
-    # Vault Agent écrit les certificats PostgreSQL dans :
-    #
-    # /var/lib/pgsql/17/data/ssl
-    #
-    # Si Vault Agent reste actif pendant la suppression de PGDATA,
-    # il recrée immédiatement ce répertoire.
-    #
-    # pg_basebackup, exécuté comme postgres, rencontre alors :
-    #
-    #   ssl: File exists
-    #   Permission denied
-    #
-    # Il faut donc arrêter Vault Agent AVANT de supprimer PGDATA.
+    # Les certificats PostgreSQL sont dans PGDATA/ssl.
+    # Vault Agent doit être arrêté avant suppression de PGDATA,
+    # sinon il recrée immédiatement le répertoire ssl.
     #################################################################
 
-    - name: Stopper Vault Agent avant le clonage du standby
+    - name: Stopper Vault Agent avant reclonage
       ansible.builtin.systemd:
         name: vault-agent
         state: stopped
-
       when:
         - repmgr_standby_clone_required | bool
         - "'vault-agent.service' in ansible_facts.services"
 
-
     #################################################################
-    # Nettoyage PGDATA
+    # NETTOYAGE AVANT CLONE
     #################################################################
 
-    - name: Supprimer complètement PGDATA du standby
+    - name: Supprimer PGDATA avant reclonage
       ansible.builtin.file:
         path: "{{ postgresql_data_dir }}"
         state: absent
-
       when:
         - repmgr_standby_clone_required | bool
 
-
-    - name: Supprimer complètement tbs_data du standby
+    - name: Supprimer tbs_data avant reclonage
       ansible.builtin.file:
         path: "{{ postgres_path_data }}/tbs_data"
         state: absent
-
       when:
         - repmgr_standby_clone_required | bool
 
-
-    #################################################################
-    # Vérification importante :
-    #
-    # On s'assure que Vault Agent n'a pas recréé PGDATA.
-    #################################################################
-
-    - name: Vérifier que PGDATA est réellement absent avant pg_basebackup
+    - name: Vérifier que PGDATA est absent
       ansible.builtin.stat:
         path: "{{ postgresql_data_dir }}"
-      register: repmgr_pgdata_after_cleanup
-
+      register: repmgr_pgdata_before_clone
       when:
         - repmgr_standby_clone_required | bool
 
-    - name: Vérifier que PGDATA n'a pas été recréé avant le clone
+    - name: Vérifier que Vault Agent n'a pas recréé PGDATA
       ansible.builtin.assert:
         that:
-          - not repmgr_pgdata_after_cleanup.stat.exists
-
+          - not repmgr_pgdata_before_clone.stat.exists
         fail_msg: >-
           {{ postgresql_data_dir }} a été recréé avant
           repmgr standby clone.
-          Vérifier notamment que Vault Agent est bien arrêté.
-
+          Vérifier que Vault Agent est réellement arrêté.
         success_msg: >-
-          PGDATA est correctement supprimé avant
-          repmgr standby clone.
-
+          PGDATA est correctement absent avant le clone.
       when:
         - repmgr_standby_clone_required | bool
 
     #################################################################
-    # CLONE REPMGR
+    # CLONE
     #################################################################
 
     - name: Exécuter repmgr standby clone
       become: true
       become_user: postgres
-
-      ansible.builtin.command: >-
-        /usr/pgsql-17/bin/repmgr
-        -h "{{
-          (
-            hostvars[
-              groups['postgresql_primary'] | first
-            ]['ansible_facts']['default_ipv4']['address']
-            |
-            default(
-              hostvars[
-                groups['postgresql_primary'] | first
-              ]['ansible_default_ipv4']['address']
-            )
-          )
-          | mandatory
-        }}"
-        -U "{{ postgres_user_repmgr }}"
-        -d "{{ postgres_bdd_repmgr }}"
-        -f /etc/repmgr/17/repmgr.conf
-        standby clone
-        --copy-external-config-files
-        -F
-
+      ansible.builtin.command:
+        argv:
+          - /usr/pgsql-17/bin/repmgr
+          - -h
+          - "{{ repmgr_primary_ip }}"
+          - -U
+          - "{{ postgres_user_repmgr }}"
+          - -d
+          - "{{ postgres_bdd_repmgr }}"
+          - -f
+          - /etc/repmgr/17/repmgr.conf
+          - standby
+          - clone
+          - --copy-external-config-files
+          - -F
+      environment:
+        PGPASSFILE: /var/lib/pgsql/.pgpass
       register: repmgr_standby_clone_result
-
       changed_when: true
-
       when:
         - repmgr_standby_clone_required | bool
 
 
-    #################################################################
-    # Validation du clone
-    #################################################################
+#####################################################################
+# VERIFICATION DU DATADIR DB2
+#####################################################################
 
-    - name: Vérifier PG_VERSION après clonage
+- name: Vérifier le cluster PostgreSQL de db2
+  hosts: postgresql_replica
+  become: true
+
+  tasks:
+
+    - name: Vérifier PG_VERSION après préparation
       ansible.builtin.stat:
         path: "{{ postgresql_data_dir }}/PG_VERSION"
-
       register: repmgr_pg_version_after_clone
 
-
-    - name: Vérifier standby.signal après clonage
+    - name: Vérifier standby.signal après préparation
       ansible.builtin.stat:
         path: "{{ postgresql_data_dir }}/standby.signal"
-
       register: repmgr_standby_signal_after_clone
 
-
-    - name: Vérifier que db2 possède un cluster PostgreSQL valide
+    - name: Vérifier que db2 possède PG_VERSION
       ansible.builtin.assert:
         that:
           - repmgr_pg_version_after_clone.stat.exists
-
         fail_msg: >-
-          PG_VERSION est absent de
-          {{ postgresql_data_dir }} après le clonage.
+          PG_VERSION est absent de {{ postgresql_data_dir }}.
+          db2 ne possède pas de cluster PostgreSQL valide.
 
-
-    - name: Vérifier que db2 est configuré comme standby
+    - name: Vérifier la présence de standby.signal
       ansible.builtin.assert:
         that:
           - repmgr_standby_signal_after_clone.stat.exists
-
         fail_msg: >-
-          standby.signal est absent de
-          {{ postgresql_data_dir }}.
-          db2 n'est pas configuré comme standby.
+          standby.signal est absent de {{ postgresql_data_dir }}.
+          Le serveur existe mais n'est pas configuré comme standby.
+          Si un reclonage volontaire est nécessaire,
+          relancer AAP avec : repmgr_force_standby_clone=true
 
-    #################################################################
-    # CERTIFICAT VAULT PROPRE A DB2
-    #
-    # Cette tâche reconfigure/redémarre Vault Agent APRÈS le clone.
-    #################################################################
+
+#####################################################################
+# CERTIFICAT VAULT ET TLS DB2
+#####################################################################
+
+- name: Configurer le certificat et TLS PostgreSQL de db2
+  hosts: postgresql_replica
+  become: true
+
+  collections:
+    - minarm.gds
+
+  tasks:
 
     - name: Générer ou vérifier le certificat PostgreSQL standby avec Vault
       ansible.builtin.import_tasks:
         file: tasks/get_postgresql_vault_cert.yml
-
-    #################################################################
-    # TLS PostgreSQL
-    #################################################################
 
     - name: Appliquer TLS PostgreSQL standby
       ansible.builtin.import_tasks:
         file: tasks/apply_postgresql_tls.yml
 
     #################################################################
-    # Suppression éventuelle des certificats du primary copiés par
-    # pg_basebackup.
+    # NETTOYAGE DES CERTIFICATS DU PRIMARY COPIES PAR PG_BASEBACKUP
     #################################################################
 
-    - name: Calculer le CN du primary copié pendant le clone
+    - name: Calculer le CN Vault du primary
       ansible.builtin.set_fact:
         postgresql_primary_vault_cn: >-
           {{
@@ -412,31 +509,98 @@
             | lower
           }}
 
-
-    - name: Supprimer du standby les certificats copiés depuis le primary
+    - name: Supprimer les certificats du primary présents sur db2
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent
       loop:
-
-        - >-
-          {{ postgresql_ssl_dir }}/{{ postgresql_primary_vault_cn }}.pem
-
-        - >-
-          {{ postgresql_ssl_dir }}/{{ postgresql_primary_vault_cn }}.key
-
-        - >-
-          {{ postgresql_ssl_dir }}/{{ postgresql_primary_vault_cn }}_ca_chain.pem
-
+        - "{{ postgresql_ssl_dir }}/{{ postgresql_primary_vault_cn }}.pem"
+        - "{{ postgresql_ssl_dir }}/{{ postgresql_primary_vault_cn }}.key"
+        - "{{ postgresql_ssl_dir }}/{{ postgresql_primary_vault_cn }}_ca_chain.pem"
       when:
         - postgresql_primary_vault_cn != postgresql_vault_expected_cn
 
+    #################################################################
+    # VERIFIER QUE POSTGRESQL DB2 EST DISPONIBLE
+    #################################################################
+
+    - name: S'assurer que PostgreSQL 17 est démarré sur db2
+      ansible.builtin.systemd:
+        name: postgresql-17
+        state: started
+        enabled: true
+
+    - name: Attendre que PostgreSQL écoute localement sur 5432
+      ansible.builtin.wait_for:
+        host: "127.0.0.1"
+        port: 5432
+        state: started
+        delay: 1
+        timeout: 60
 
     #################################################################
-    # ENREGISTREMENT DB2
+    # VERIFICATION DU ROLE STANDBY
     #################################################################
 
-    - name: Vérifier si le standby est déjà enregistré
+    - name: Vérifier que db2 est réellement en recovery
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - /usr/pgsql-17/bin/psql
+          - -Atqc
+          - "SELECT pg_is_in_recovery();"
+      register: postgresql_db2_recovery
+      changed_when: false
+
+    - name: Vérifier que db2 est bien un standby PostgreSQL
+      ansible.builtin.assert:
+        that:
+          - postgresql_db2_recovery.stdout | trim == "t"
+        fail_msg: >-
+          db2 est démarré mais n'est pas en mode standby.
+          pg_is_in_recovery()={{ postgresql_db2_recovery.stdout | trim }}.
+          Aucun enregistrement repmgr ne sera effectué.
+          Si db2 doit être reconstruit depuis db1,
+          utiliser repmgr_force_standby_clone=true.
+        success_msg: >-
+          db2 est bien démarré en mode standby.
+
+    #################################################################
+    # TEST DE LA CONNEXION EXACTE UTILISEE PAR REPMGR
+    #################################################################
+
+    - name: Vérifier la connexion repl vers la base repmgr de db2
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - /usr/pgsql-17/bin/psql
+          - -h
+          - "{{ repmgr_standby_ip }}"
+          - -p
+          - "{{ postgresql_port | string }}"
+          - -U
+          - "{{ postgres_user_repmgr }}"
+          - -d
+          - "{{ postgres_bdd_repmgr }}"
+          - -Atqc
+          - "SELECT 1;"
+      environment:
+        PGPASSFILE: /var/lib/pgsql/.pgpass
+      register: repmgr_standby_connection
+      changed_when: false
+      retries: 10
+      delay: 3
+      until:
+        - repmgr_standby_connection.rc == 0
+        - repmgr_standby_connection.stdout | trim == "1"
+
+    #################################################################
+    # ENREGISTREMENT REPMGR DB2
+    #################################################################
+
+    - name: Vérifier le statut repmgr du standby
       become: true
       become_user: postgres
       ansible.builtin.command:
@@ -446,12 +610,18 @@
           - /etc/repmgr/17/repmgr.conf
           - node
           - status
-
+      environment:
+        PGPASSFILE: /var/lib/pgsql/.pgpass
       register: repmgr_standby_status
-
       changed_when: false
       failed_when: false
 
+    - name: Afficher le résultat de repmgr node status
+      ansible.builtin.debug:
+        msg:
+          - "rc={{ repmgr_standby_status.rc }}"
+          - "stdout={{ repmgr_standby_status.stdout }}"
+          - "stderr={{ repmgr_standby_status.stderr }}"
 
     - name: Enregistrer le standby si nécessaire
       become: true
@@ -464,15 +634,42 @@
           - standby
           - register
           - -F
-
+      environment:
+        PGPASSFILE: /var/lib/pgsql/.pgpass
       when: >-
         repmgr_standby_status.rc != 0
         or
         'not registered'
         in
-        (repmgr_standby_status.stdout | lower)
-
+        (
+          (
+            repmgr_standby_status.stdout
+            ~
+            repmgr_standby_status.stderr
+          )
+          | lower
+        )
       changed_when: true
+
+    #################################################################
+    # VERIFICATION APRES ENREGISTREMENT
+    #################################################################
+
+    - name: Vérifier le statut final du standby dans repmgr
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - /usr/pgsql-17/bin/repmgr
+          - -f
+          - /etc/repmgr/17/repmgr.conf
+          - node
+          - status
+      environment:
+        PGPASSFILE: /var/lib/pgsql/.pgpass
+      register: repmgr_standby_final_status
+      changed_when: false
+
 
 #####################################################################
 # SERVICES REPMGR
@@ -502,30 +699,29 @@
 
   tasks:
 
-    - name: Check if repmgrd is running
+    - name: Vérifier si repmgrd est déjà actif
       become: true
-
       ansible.builtin.shell: >-
         pgrep -u postgres -f 'repmgrd.*repmgr.conf'
       register: repmgrd_pgrep
-
       changed_when: false
       failed_when: false
 
-
-    - name: Start repmgrd only if not running
+    - name: Démarrer repmgrd uniquement si nécessaire
       become: true
       become_user: postgres
-
-      ansible.builtin.command: >-
-        /usr/pgsql-17/bin/repmgrd
-        -f /etc/repmgr/17/repmgr.conf
-        start
-
+      ansible.builtin.command:
+        argv:
+          - /usr/pgsql-17/bin/repmgrd
+          - -f
+          - /etc/repmgr/17/repmgr.conf
+          - start
+      environment:
+        PGPASSFILE: /var/lib/pgsql/.pgpass
       when:
         - repmgrd_pgrep.rc != 0
-
       changed_when: true
+
 
 #####################################################################
 # SCRIPT CLUSTER
@@ -541,8 +737,7 @@
       ansible.builtin.file:
         path: /opt/script_cluster_postgres
         state: directory
-
-        mode: '0755'
+        mode: "0755"
 
 
 - name: Script configure_cluster_standby
