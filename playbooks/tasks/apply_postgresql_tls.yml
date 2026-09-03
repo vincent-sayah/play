@@ -1,4 +1,8 @@
 ---
+#####################################################################
+# ATTENTE DES CERTIFICATS VAULT
+#####################################################################
+
 - name: Attendre la génération des fichiers TLS PostgreSQL par Vault
   ansible.builtin.wait_for:
     path: "{{ item }}"
@@ -8,6 +12,11 @@
     - "{{ postgresql_ssl_ca_file }}"
     - "{{ postgresql_ssl_server_cert_file }}"
     - "{{ postgresql_ssl_server_key_file }}"
+
+
+#####################################################################
+# CONTROLE DU CERTIFICAT
+#####################################################################
 
 - name: Lire les informations du certificat PostgreSQL
   ansible.builtin.command:
@@ -22,17 +31,25 @@
       - -dates
       - -ext
       - subjectAltName
+
   register: postgresql_vault_certificate
   changed_when: false
+
 
 - name: Vérifier le nom DNS du certificat PostgreSQL
   ansible.builtin.assert:
     that:
       - postgresql_vault_expected_cn in postgresql_vault_certificate.stdout
+
     fail_msg: >-
       Le certificat {{ postgresql_ssl_server_cert_file }}
       ne contient pas le nom
       {{ postgresql_vault_expected_cn }}.
+
+
+#####################################################################
+# CONTROLE CERTIFICAT / CLE
+#####################################################################
 
 - name: Calculer l'empreinte de la clé publique du certificat
   ansible.builtin.shell: >-
@@ -43,10 +60,13 @@
     /usr/bin/openssl pkey -pubin -outform DER |
     /usr/bin/sha256sum |
     /usr/bin/awk '{print $1}'
+
   args:
     executable: /bin/bash
+
   register: postgresql_certificate_public_key_hash
   changed_when: false
+
 
 - name: Calculer l'empreinte publique de la clé privée
   ansible.builtin.shell: >-
@@ -56,38 +76,64 @@
     -pubout -outform DER |
     /usr/bin/sha256sum |
     /usr/bin/awk '{print $1}'
+
   args:
     executable: /bin/bash
+
   register: postgresql_private_key_public_hash
+
   changed_when: false
+
   no_log: true
+
 
 - name: Vérifier la correspondance certificat et clé privée
   ansible.builtin.assert:
+
     that:
       - >-
         postgresql_certificate_public_key_hash.stdout
         ==
         postgresql_private_key_public_hash.stdout
+
     fail_msg: >-
       Le certificat PostgreSQL et sa clé privée ne correspondent pas.
 
+
+#####################################################################
+# SELINUX
+#####################################################################
+
 - name: Restaurer les contextes SELinux PostgreSQL
   ansible.builtin.command:
+
     argv:
       - /usr/sbin/restorecon
       - -Rv
       - "{{ postgresql_ssl_dir }}"
+
   changed_when: false
+
   failed_when: false
+
+
+#####################################################################
+# CONFIGURATION TLS POSTGRESQL
+#####################################################################
 
 - name: Configurer TLS dans postgresql.conf avec les fichiers Vault
   ansible.builtin.lineinfile:
+
     path: "{{ postgresql_data_dir }}/postgresql.conf"
+
     regexp: "^#?{{ item.key }}\\s*=.*$"
+
     line: "{{ item.key }} = '{{ item.value }}'"
+
     state: present
+
   loop:
+
     - key: ssl
       value: "on"
 
@@ -99,105 +145,169 @@
 
     - key: ssl_key_file
       value: "{{ postgresql_ssl_server_key_file }}"
+
   register: postgresql_vault_tls_configuration
+
+
+#####################################################################
+# SERVICE POSTGRESQL
+#####################################################################
 
 - name: Redémarrer PostgreSQL après modification de TLS
   ansible.builtin.systemd:
+
     name: "postgresql-{{ postgresql_pg_major }}"
+
     state: restarted
+
     enabled: true
+
     daemon_reload: true
-  when: postgresql_vault_tls_configuration.changed
+
+  when:
+    - postgresql_vault_tls_configuration.changed
+
 
 - name: Démarrer PostgreSQL si aucun redémarrage n'était nécessaire
   ansible.builtin.systemd:
+
     name: "postgresql-{{ postgresql_pg_major }}"
+
     state: started
+
     enabled: true
-  when: not postgresql_vault_tls_configuration.changed
+
+  when:
+    - not postgresql_vault_tls_configuration.changed
+
 
 - name: Attendre que PostgreSQL accepte les connexions TCP locales
   ansible.builtin.wait_for:
+
     host: "127.0.0.1"
+
     port: 5432
+
     state: started
+
     delay: 1
+
     timeout: 60
 
-# Le pg_hba.conf impose scram-sha-256 pour les connexions locales.
-# On garantit donc une entrée .pgpass pour le compte DB postgres afin que
-# les contrôles locaux suivants (SHOW ssl, pg_is_in_recovery, etc.) puissent
-# s'authentifier sans modifier les règles de sécurité pg_hba.conf.
-- name: Garantir les entrées pgpass locales du compte PostgreSQL postgres
-  ansible.builtin.lineinfile:
-    path: /var/lib/pgsql/.pgpass
-    regexp: "^{{ item | regex_escape() }}:5432:postgres:{{ (postgresql_db_account | default('postgres')) | regex_escape() }}:"
-    line: "{{ item }}:5432:postgres:{{ postgresql_db_account | default('postgres') }}:{{ postgresql_db_account_password }}"
-    state: present
-    create: true
-    owner: postgres
-    group: postgres
-    mode: "0600"
-  loop:
-    - localhost
-    - 127.0.0.1
-  no_log: true
+
+#####################################################################
+# VERIFICATION DE LA CONFIGURATION TLS
+#
+# IMPORTANT :
+#
+# La collection minarm.postgresql génère déjà dans :
+#
+# /var/lib/pgsql/.pgpass
+#
+# une entrée du type :
+#
+# localhost:5432:*:postgres:<password>
+#
+# Nous réutilisons cette entrée.
+#
+# Il ne faut PAS ajouter de nouvelle ligne postgres dans .pgpass.
+#####################################################################
 
 - name: Vérifier que PostgreSQL utilise TLS
   become: true
   become_user: postgres
+
   ansible.builtin.command:
+
     argv:
+
       - "/usr/pgsql-{{ postgresql_pg_major }}/bin/psql"
+
       - -h
-      - "127.0.0.1"
+      - "localhost"
+
       - -p
       - "5432"
+
       - -U
       - "{{ postgresql_db_account | default('postgres') }}"
+
       - -d
       - "postgres"
+
       - -Atqc
       - "SHOW ssl;"
+
   environment:
+
     PGPASSFILE: /var/lib/pgsql/.pgpass
+
   register: postgresql_ssl_status
+
   changed_when: false
+
   failed_when: >-
     (postgresql_ssl_status.rc != 0)
     or
     (postgresql_ssl_status.stdout | trim != 'on')
 
+
+#####################################################################
+# VERIFICATION REELLE D'UNE CONNEXION TLS
+#####################################################################
+
 - name: Vérifier que la session de contrôle est réellement chiffrée en TLS
   become: true
   become_user: postgres
+
   ansible.builtin.command:
+
     argv:
+
       - "/usr/pgsql-{{ postgresql_pg_major }}/bin/psql"
+
       - -h
-      - "127.0.0.1"
+      - "localhost"
+
       - -p
       - "5432"
+
       - -U
       - "{{ postgresql_db_account | default('postgres') }}"
+
       - -d
       - "postgres"
+
       - -Atqc
+
       - "SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid();"
+
   environment:
+
     PGPASSFILE: /var/lib/pgsql/.pgpass
+
     PGSSLMODE: require
+
   register: postgresql_ssl_session_status
+
   changed_when: false
+
   failed_when: >-
     (postgresql_ssl_session_status.rc != 0)
     or
     (postgresql_ssl_session_status.stdout | trim != 't')
 
+
+#####################################################################
+# VAULT AGENT
+#####################################################################
+
 - name: Vérifier que Vault Agent est actif
   ansible.builtin.command:
+
     argv:
       - /usr/bin/systemctl
       - is-active
       - vault-agent
+
   changed_when: false

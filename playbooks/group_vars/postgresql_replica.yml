@@ -21,6 +21,7 @@ postgresql_ssl_enable: false
 postgres_user_repmgr: "repl"
 postgres_bdd_repmgr: "repmgr"
 
+
 #####################################################################
 #                    REPMGR / STANDBY                               #
 #####################################################################
@@ -44,7 +45,7 @@ postgres_bdd_repmgr: "repmgr"
 #
 # repmgr_force_standby_clone: true
 #
-repmgr_force_standby_clone: false
+repmgr_force_standby_clone: true
 
 
 #####################################################################
@@ -52,6 +53,7 @@ repmgr_force_standby_clone: false
 #####################################################################
 
 db_port: "5432"
+
 obs_service: postgresql-17
 obs_role: postgresql_standby
 

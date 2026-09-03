@@ -1,12 +1,22 @@
 ---
+#####################################################################
+# INSTALLATION POSTGRESQL PRIMARY
+#####################################################################
+
 - name: Gather facts
   hosts: all
   gather_facts: true
   tasks: []
 
+
+#####################################################################
+# LVM DATABASE
+#####################################################################
+
 - name: Configure LVM Database
   hosts: database
   become: true
+
   environment:
     MINARM_YUM_REPO_NATIONAL_ORIGIN: "{{ minarm_yum_repo_norigin }}"
     MINARM_ATF_REPO_MIDDLEWARE_BASEURL: "{{ minarm_atf_repo_mbaseurl }}"
@@ -15,42 +25,156 @@
     - minarm.lvm
 
   roles:
+
     - role: minarm.lvm.lvm_install
       tags:
         - install_lvm_database
 
+
+#####################################################################
+# POSTGRESQL PRIMARY
+#####################################################################
+
 - name: Configure Database
   hosts: postgresql_primary
   become: true
+
   environment:
+
     MINARM_YUM_REPO_NATIONAL_ORIGIN: "{{ minarm_yum_repo_norigin }}"
+
     MINARM_ATF_REPO_MIDDLEWARE_BASEURL: "{{ minarm_atf_repo_mbaseurl }}"
 
+    # Important :
+    # le rôle minarm.postgresql utilise psql -w.
+    # Sur une installation existante, pg_hba.conf est en SCRAM.
+    # On force donc libpq à utiliser le fichier .pgpass.
+    PGPASSFILE: /var/lib/pgsql/.pgpass
+
+
   collections:
+
     - minarm.gds
     - minarm.postgresql
     - minarm.firewalld
 
+
+  ###################################################################
+  # PRE-TASKS
+  ###################################################################
+
   pre_tasks:
+
     - name: Vérifier si postgresql.conf existe déjà
       ansible.builtin.stat:
+
         path: "{{ postgresql_data_dir }}/postgresql.conf"
+
       register: pg_conf_existing
 
+
+    #################################################################
+    # CAS D'UNE INSTALLATION POSTGRESQL EXISTANTE
+    #
+    # La collection minarm.postgresql considère qu'un .pgpass
+    # existant signifie que l'initialisation a déjà été réalisée.
+    #
+    # Elle ne remet donc pas temporairement pg_hba.conf en trust.
+    #
+    # Il faut alors fournir le mot de passe du compte DB postgres
+    # AVANT d'appeler minarm.postgresql.postgresql_install.
+    #################################################################
+
+    - name: Garantir le fichier pgpass sur un PostgreSQL déjà installé
+      ansible.builtin.file:
+
+        path: /var/lib/pgsql/.pgpass
+
+        state: touch
+
+        owner: postgres
+        group: postgres
+
+        mode: "0600"
+
+        modification_time: preserve
+        access_time: preserve
+
+      when:
+        - pg_conf_existing.stat.exists
+
+
+    - name: Garantir les credentials postgres dans pgpass
+      ansible.builtin.lineinfile:
+
+        path: /var/lib/pgsql/.pgpass
+
+        regexp: "^{{ item | regex_escape() }}:{{ postgresql_port | default(5432) }}:postgres:{{ (postgresql_db_account | default('postgres')) | regex_escape() }}:"
+
+        line: "{{ item }}:{{ postgresql_port | default(5432) }}:postgres:{{ postgresql_db_account | default('postgres') }}:{{ postgresql_db_account_password }}"
+
+        state: present
+
+        owner: postgres
+        group: postgres
+
+        mode: "0600"
+
+      loop:
+
+        - localhost
+        - 127.0.0.1
+
+      when:
+        - pg_conf_existing.stat.exists
+
+      no_log: true
+
+
+  ###################################################################
+  # ROLES
+  ###################################################################
+
   roles:
+
     - role: install_divers
+
     - role: minarm.firewalld.firewalld_install
+
     - role: minarm.postgresql.postgresql_install
 
+
+  ###################################################################
+  # POST-TASKS
+  ###################################################################
+
   tasks:
+
+    #################################################################
+    # CERTIFICAT VAULT
+    #################################################################
+
     - name: Générer le certificat PostgreSQL primary avec Vault
       ansible.builtin.import_tasks:
+
         file: tasks/get_postgresql_vault_cert.yml
+
+
+    #################################################################
+    # TLS
+    #################################################################
 
     - name: Appliquer TLS PostgreSQL primary
       ansible.builtin.import_tasks:
+
         file: tasks/apply_postgresql_tls.yml
+
+
+    #################################################################
+    # CONFIGURATION PRIMARY
+    #################################################################
 
     - name: Configurer PostgreSQL primary
       ansible.builtin.include_role:
+
         name: config_postgres_primary
