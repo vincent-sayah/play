@@ -1,0 +1,29 @@
+---
+
+- name: Ajout api obs
+  hosts: front
+  become: true
+  collections:
+    - minarm.gds
+
+  roles:
+    - role: api_obs
+    - role: trax_obs # Ajout dans route/web.php de trax l'Endpoint d'observabilité info
+
+- name: Ajout service obs
+  hosts: all
+  become: true
+  collections:
+    - minarm.core
+    - minarm.gds
+    - minarm.observability
+
+  roles:
+    - role: tenant_observability
+
+  tasks:
+    - name: Afficher la valeur de la variable
+      debug:
+        msg: |
+          "La valeur obs_service : {{ obs_service }}"
+          "La valeur obs_role : {{ obs_role }}"

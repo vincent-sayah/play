@@ -1,0 +1,30 @@
+---
+- name: Gather facts from all
+  hosts: all
+  gather_facts: true
+  tasks: []
+
+- name: Configure Database
+  hosts: postgresql_replica
+  become: true
+  environment:
+    MINARM_YUM_REPO_NATIONAL_ORIGIN: "{{ minarm_yum_repo_norigin }}"
+    MINARM_ATF_REPO_MIDDLEWARE_BASEURL: "{{ minarm_atf_repo_mbaseurl }}"
+
+  collections:
+    - minarm.gds
+    - minarm.lvm
+    - minarm.postgresql
+    - minarm.firewalld
+
+  pre_tasks:
+    - name: Vérifier si postgresql.conf existe déjà
+      ansible.builtin.stat:
+        path: "{{ postgresql_data_dir }}/postgresql.conf"
+      register: pg_conf_existing
+
+  roles:
+    - role: install_divers
+    - role: minarm.firewalld.firewalld_install
+    - role: minarm.postgresql.postgresql_install
+    - role: config_postgres_replica

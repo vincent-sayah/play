@@ -1,0 +1,10 @@
+---
+- name: Install and Configure PHP
+  hosts: front
+  become: true
+  environment:
+    MINARM_YUM_REPO_NATIONAL_ORIGIN: "{{ minarm_yum_repo_norigin }}"
+    MINARM_ATF_REPO_MIDDLEWARE_BASEURL: "{{ minarm_atf_repo_mbaseurl }}"
+
+  collections:
+    - minarm.php

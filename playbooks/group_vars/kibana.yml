@@ -1,0 +1,175 @@
+---
+
+#######################################
+##              LVM                  ##
+##                                   ##
+#######################################
+
+## Définition des groupes de volumes logiques (Volume Groups) pour la LV_KIBANA
+
+# Sur une VM dédiée Kibana, le service lui-même ne stocke pas beaucoup de données locales :
+# Les dashboards, index patterns, spaces, etc. sont stockés dans Elasticsearch.
+# Localement, Kibana n’écrit que quelques fichiers temporaires et des logs (/var/log/kibana/).
+
+lvm_volume_groups:
+  - vg: 'VG_DATA'
+    pvs: ['/dev/sdb']
+    logical_volumes:
+      - lv: LV_KIBANA
+        size: 100%VG
+        mount: '/var/log/kibana'
+        mount_state: 'mounted'
+        state: 'present'
+        fs_type: 'xfs'
+
+#############################################
+##                Metier                   ##
+##                                         ##
+#############################################
+
+## Packages placés dans Médusa nécessaires pour l'architecture TRAX
+## OAUTH2
+
+oauth2_tar: "oauth2-proxy-v7.15.3.linux-amd64"
+oauth2_extension: ".tar.gz"
+oauth2_medusa_file_path: "{{ identifiant_zp_repo }}-generic/oauth2_proxy/{{ oauth2_tar }}{{ oauth2_extension }}"
+
+#############################################
+##       KIBANA CERTIFICATES / VAULT       ##
+##                                         ##
+#############################################
+
+# Certificat HTTPS Kibana généré par GDS / Vault.
+#
+# Le fichier vault_agent_https_cert généré par vault_get_cert contient déjà :
+#
+#   1 - certificat serveur Kibana
+#   2 - certificat intermédiaire GDS
+#   3 - certificat intermédiaire PICSEL
+#
+# Il ne faut donc PAS concaténer vault_agent_https_ca_chain
+# avec vault_agent_https_cert.
+
+vault_agent_https_ca_chain: "/etc/pki/tls/ca_chain/{{ alias_dns_kibana }}.{{ zone_url }}_ca_chain.pem"
+vault_agent_https_cert: "/etc/pki/tls/certs/{{ alias_dns_kibana }}.{{ zone_url }}.pem"
+vault_agent_https_pk: "/etc/pki/tls/private/{{ alias_dns_kibana }}.{{ zone_url }}.key"
+vault_agent_https_cn: "{{ alias_dns_kibana }}.{{ zone_url }}"
+
+vault_agent_https_sans:
+  - "{{ alias_dns_kibana }}.{{ zone_url }}"
+
+group_ca_chain: kibana
+group_certificate: kibana
+group_private_key: kibana
+
+mode_ca_chain: "0644"
+mode_certificate: "0644"
+mode_private_key: "0640"
+
+# La configuration des services reste gérée par les rôles XAPI_MN.
+web_service: none
+
+#############################################
+##               RUCHE                     ##
+##                                         ##
+#############################################
+
+# Variables d'installation attendues par minarm.elastic.kibana_install
+
+kibana_version: "8.19.16"
+kibana_package_url: "https://artifacts.elastic.co/downloads/kibana/kibana-{{ kibana_version }}-x86_64.rpm"
+kibana_package: kibana
+kibana_state: present
+kibana_download_timeout: 300
+
+# Path fichier de config
+kibana_config_path: "/etc/kibana/kibana.yml"
+
+# PORT
+server_port_kibana: 5601
+
+
+# Variables minimales attendues par minarm.elastic.kibana_install.
+# La configuration finale complète reste rendue par :
+#
+# roles/kibana_config/templates/kibana.yml.j2
+
+kibana_conf:
+  server.port: "{{ server_port_kibana }}"
+  server.host: "0.0.0.0"
+
+############################
+# Config CERT pour Kibana  #
+############################
+
+kibana_certs_dir: "/etc/kibana/certs"
+
+# -------------------------------------------------------------------
+# CA ELASTICSEARCH
+#
+# Cette CA sert UNIQUEMENT à la connexion :
+#
+# Kibana -> Elasticsearch
+#
+# Elle reste récupérée depuis Médusa.
+# -------------------------------------------------------------------
+
+kibana_elasticsearch_ca_src: "{{ vm_file_path }}{{ ca_elastic }}"
+kibana_elasticsearch_ca_path: "{{ kibana_certs_dir }}/{{ ca_elastic }}"
+
+# -------------------------------------------------------------------
+# CERTIFICAT SERVEUR KIBANA
+#
+# Utilisation DIRECTE du fichier PEM généré par vault_get_cert.
+#
+# Ce PEM contient déjà le certificat serveur et les intermédiaires.
+# -------------------------------------------------------------------
+
+kibana_cert_path: "{{ vault_agent_https_cert }}"
+kibana_key_path: "{{ vault_agent_https_pk }}"
+
+############################
+# Config Nginx pour Kibana #
+############################
+
+# Nginx utilise le même certificat Vault que Kibana.
+nginx_cert_dir: "/etc/pki/tls/certs"
+nginx_cert_path: "{{ vault_agent_https_cert }}"
+nginx_key_path: "{{ vault_agent_https_pk }}"
+
+nginx_conf_d_files:
+  - templates/kibana.conf
+
+# Backend Kibana
+kibana_backend_host: "127.0.0.1"
+kibana_backend_port: "{{ server_port_kibana | default(5601) }}"
+kibana_backend_url: "https://{{ kibana_backend_host }}:{{ kibana_backend_port }}"
+
+
+#####################################################################
+# Trust store système utilisé par Nginx pour vérifier Kibana
+#####################################################################
+
+nginx_kibana_trusted_ca: "/etc/pki/tls/certs/ca-bundle.crt"
+
+#####################################################################
+#            Variables tenant observability                         #
+#####################################################################
+
+obs_service: kibana
+obs_role: kibana
+
+# Variable et configuration du firewall
+firewalld:
+
+  - name: "Ouverture du port 4180"
+    port: "4180/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"
+
+  - name: "Ouverture du port 5601"
+    port: "5601/tcp"
+    permanent: true
+    immediate: true
+    zone: "public"

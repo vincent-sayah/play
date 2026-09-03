@@ -1,0 +1,29 @@
+---
+- name: Gather facts
+  hosts: all
+  gather_facts: true
+  tasks: []
+
+- name: Install and Configure haproxy
+  ## Hosts sur lesquels appliquer les tâches (all, database, front, ...)
+  hosts: loadbalancer
+  become: true
+  environment:
+    MINARM_YUM_REPO_NATIONAL_ORIGIN: "{{ minarm_yum_repo_norigin }}"
+    MINARM_ATF_REPO_MIDDLEWARE_BASEURL: "{{ minarm_atf_repo_mbaseurl }}"
+
+  ## Référencement des collections nécessaires
+  collections:
+    - minarm.gds
+    - minarm.lvm
+    - minarm.haproxy
+    - minarm.firewalld
+
+  ## Appel dans l'ordre d'exécution des roles minarm et des roles customs.
+  roles:
+    - role: minarm.lvm.lvm_install
+    - role: install_divers
+    - role: minarm.firewalld.firewalld_install
+    - role: minarm.haproxy.haproxy_install
+    - role: start_haproxy
+    - role: clean_tmp_haproxy

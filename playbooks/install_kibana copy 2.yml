@@ -1,0 +1,236 @@
+---
+# Installation Kibana avec minarm.elastic
+#
+# Architecture :
+#
+# - certificat HTTPS Kibana généré par GDS / Vault
+# - Vault Agent installé/configuré par minarm.gds.vault_get_cert
+# - CA Elasticsearch conservée depuis Médusa
+# - connexion directe Kibana -> cluster Elasticsearch
+# - compte kibana_system / mot de passe GDS
+# - Nginx reverse proxy
+# - oauth2-proxy installé dans le playbook install_oauth2.yml
+
+
+- name: Gather facts
+  hosts: all
+  gather_facts: true
+  tasks: []
+
+
+- name: Installer et configurer Kibana
+  hosts: kibana
+  become: true
+
+  environment:
+
+    MINARM_YUM_REPO_NATIONAL_ORIGIN: "{{ minarm_yum_repo_norigin }}"
+    MINARM_ATF_REPO_MIDDLEWARE_BASEURL: "{{ minarm_atf_repo_mbaseurl }}"
+    MINARM_ATF_REPO_LIVRABLE_BASEURL: "{{ medusa_url }}"
+    MINARM_ATF_REPO_LIVRABLE_USER: "{{ artifactory_user }}"
+    MINARM_ATF_REPO_LIVRABLE_PASSWORD: "{{ artifactory_password }}"
+
+
+  collections:
+
+    - minarm.gds
+    - minarm.elastic
+    - minarm.nginx
+    - minarm.lvm
+    - minarm.firewalld
+
+
+  ###################################################################
+  # PRE-TASKS
+  #
+  # Même principe que playbooks/install_apache.yml
+  ###################################################################
+
+  pre_tasks:
+
+    - name: Calculer le CN attendu pour Kibana
+      ansible.builtin.set_fact:
+        kibana_expected_vault_cn: >-
+          {{ alias_dns_kibana }}.{{ zone_url }}
+
+
+    - name: Forcer les paramètres du certificat Kibana
+      ansible.builtin.set_fact:
+        vault_agent_https_cn: "{{ kibana_expected_vault_cn }}"
+        vault_agent_https_sans:
+          - "{{ kibana_expected_vault_cn }}"
+
+
+    - name: Vérifier que la priorité des variables AAP ne surcharge pas le CN Kibana
+      ansible.builtin.assert:
+        that:
+          - vault_agent_https_cn == kibana_expected_vault_cn
+          - kibana_expected_vault_cn in vault_agent_https_sans
+
+        fail_msg: >-
+          Le CN effectif est {{ vault_agent_https_cn }},
+          alors que {{ kibana_expected_vault_cn }} est attendu.
+          Une extra-var AAP surcharge probablement la valeur
+          du playbook.
+
+        success_msg: >-
+          Le CN Vault Kibana est correctement défini :
+          {{ vault_agent_https_cn }}
+
+
+    - name: Afficher les paramètres non sensibles du certificat Kibana
+      ansible.builtin.debug:
+        msg:
+
+          - "CN attendu={{ kibana_expected_vault_cn }}"
+          - "CN effectif={{ vault_agent_https_cn }}"
+          - "SAN={{ vault_agent_https_sans }}"
+          - "Certificat={{ vault_agent_https_cert }}"
+          - "Clé={{ vault_agent_https_pk }}"
+          - "Chaîne={{ vault_agent_https_ca_chain }}"
+
+
+  ###################################################################
+  # ROLES AVANT INSTALLATION KIBANA
+  ###################################################################
+
+  roles:
+    - role: minarm.lvm.lvm_install
+    - role: minarm.firewalld.firewalld_install
+    # Ce rôle ne récupère désormais QUE la CA Elasticsearch.
+    - role: kibana_medusa
+
+
+  ###################################################################
+  # INSTALLATION ET CONFIGURATION
+  ###################################################################
+
+  tasks:
+
+    #################################################################
+    # Installation Kibana
+    #################################################################
+
+    - name: Installer Kibana avec les variables du rôle minarm.elastic.kibana_install
+
+      # Le fichier tasks/install.yml du rôle
+      # minarm.elastic.kibana_install exécute obligatoirement :
+      #
+      # kibana-setup --enrollment-token
+      #
+      # Cette étape est incompatible avec l'architecture XAPI_MN
+      # en TLS PEM.
+      #
+      # On reprend donc uniquement la tâche d'installation
+      # documentée du rôle sans enrollment automatique.
+
+      minarm.core.adaptable.package:
+        name: "{{ kibana_package_url | default(kibana_package) }}"
+        state: "{{ kibana_state }}"
+        url_category: middleware
+        update_cache: true
+        disable_gpg_check: true
+      timeout: "{{ kibana_download_timeout }}"
+      notify:
+        - Restart Kibana après installation compatible minarm
+
+
+    #################################################################
+    # Vérification installation Kibana
+    #################################################################
+
+    - name: Collecter les packages installés
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: Vérifier que le paquet Kibana est bien installé
+      ansible.builtin.assert:
+
+        that:
+          - "'kibana' in ansible_facts.packages"
+
+        fail_msg: >-
+          Le paquet Kibana n'a pas été installé.
+          Vérifier kibana_package_url,
+          kibana_version et les accès au dépôt middleware.
+
+
+    #################################################################
+    # VAULT / CERTIFICAT KIBANA
+    #
+    # Cette étape doit être exécutée APRÈS installation du paquet
+    # Kibana afin que l'utilisateur/groupe kibana existe.
+    #################################################################
+
+    - name: Générer le certificat HTTPS Kibana avec Vault
+      ansible.builtin.include_role:
+
+        name: minarm.gds.vault_get_cert
+
+
+    #################################################################
+    # Configuration minarm.elastic
+    #################################################################
+
+    - name: Appliquer le fragment de configuration du rôle minarm.elastic.kibana_install
+      ansible.builtin.include_role:
+
+        name: minarm.elastic.kibana_install
+        tasks_from: config
+
+
+    #################################################################
+    # Configuration XAPI_MN
+    #
+    # Cette étape :
+    #
+    # - installe la CA Elasticsearch
+    # - construit le fullchain Vault
+    # - configure /etc/kibana/kibana.yml
+    #################################################################
+
+    - name: Appliquer la configuration Kibana XAPI_MN
+      ansible.builtin.include_role:
+        name: kibana_config
+
+
+    #################################################################
+    # Activation Kibana
+    #################################################################
+
+    - name: Activer et démarrer Kibana
+      ansible.builtin.service:
+        name: kibana
+        enabled: true
+        daemon_reload: true
+        state: started
+
+
+    #################################################################
+    # NGINX
+    #################################################################
+
+    - name: Installer et configurer Nginx
+      ansible.builtin.include_role:
+        name: minarm.nginx.nginx_install
+
+
+    #################################################################
+    # Nettoyage
+    #################################################################
+
+    - name: Nettoyer les fichiers temporaires Kibana
+      ansible.builtin.include_role:
+        name: clean_tmp_srv_kibana
+
+
+  ###################################################################
+  # HANDLERS PLAYBOOK
+  ###################################################################
+
+  handlers:
+
+    - name: Restart Kibana après installation compatible minarm
+      ansible.builtin.service:
+        name: kibana
+        state: restarted

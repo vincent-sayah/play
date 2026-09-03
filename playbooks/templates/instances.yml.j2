@@ -1,0 +1,34 @@
+# playbooks/templates/instances.yml.j2
+instances:
+{% set hap = (groups.get('loadbalancer', []) | first | default('', true)) %}
+{% for host in groups.get('elasticsearch_cluster', []) %}
+
+{% set node_key = (
+  hostvars[host].es_node_key
+  | default((hostvars[host].group_names | select('match', '^node[0-9]+$') | list | first), true)
+  | default(hostvars[host].inventory_hostname, true)
+) %}
+
+  - name: {{ node_key }}
+    dns:
+      - {{ node_key }}
+      - {{ hostvars[host].inventory_hostname }}
+      - {{ hostvars[host].ansible_host }}
+{% if hap %}
+      - {{ hostvars[hap].inventory_hostname }}
+      - {{ hostvars[hap].ansible_host }}
+{% endif %}
+    ip:
+{% set ip_fact = hostvars[host].ansible_facts.get('default_ipv4', {}).get('address', '') %}
+{% if ip_fact %}
+      - {{ ip_fact }}
+{% else %}
+{% set ah = hostvars[host].ansible_host %}
+{% if ah is match('^\\d{1,3}(?:\\.\\d{1,3}){3}$') %}
+      - {{ ah }}
+{% else %}
+      []
+{% endif %}
+{% endif %}
+
+{% endfor %}

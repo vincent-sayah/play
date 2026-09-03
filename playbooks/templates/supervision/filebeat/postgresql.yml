@@ -1,0 +1,4 @@
+- module: postgresql
+  error:
+    enabled: true
+    var.paths: ["/var/log/postgresql/*"]

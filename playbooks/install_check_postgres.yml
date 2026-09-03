@@ -1,0 +1,25 @@
+---
+- name: Gather facts
+  hosts: all
+  gather_facts: true
+  tasks: []
+
+- name: Check postgres
+  ## Hosts sur lesquels appliquer les tâches (all, database, front, ...)
+  hosts: database
+  become: true
+  environment:
+    MINARM_YUM_REPO_NATIONAL_ORIGIN: "{{ minarm_yum_repo_norigin }}"
+    MINARM_ATF_REPO_MIDDLEWARE_BASEURL: "{{ minarm_atf_repo_mbaseurl }}"
+
+  collections:
+    - community.general
+
+  ## Appel dans l'ordre d'exécution des roles minarm et des roles customs.
+  roles:
+    - role: check_postgres_http_handler
+    - role: check_postgres_wrapper_socat
+    - role: check_postgres_service
+    - role: check_postgres_port
+      tags:
+        - check_postgres

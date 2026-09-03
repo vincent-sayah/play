@@ -1,0 +1,235 @@
+---
+# Installation Elasticsearch avec minarm.elastic + conservation du bootstrap XAPI_MN :
+# - cluster 3 nœuds
+# - CA/certificats PEM générés par elasticsearch-certutil
+# - dépôt/récupération des certificats via Médusa
+# - TLS HTTP + transport
+# - mots de passe elastic et kibana_system imposés par GDS
+
+- name: Gather facts
+  hosts: all
+  gather_facts: true
+  tasks: []
+
+- name: Préparer les nœuds Elasticsearch et installer Elasticsearch avec le rôle minarm.elastic
+  hosts: elasticsearch_cluster
+  become: true
+  environment:
+    MINARM_YUM_REPO_NATIONAL_ORIGIN: "{{ minarm_yum_repo_norigin }}"
+    MINARM_ATF_REPO_MIDDLEWARE_BASEURL: "{{ minarm_atf_repo_mbaseurl }}"
+  collections:
+    - minarm.gds
+    - minarm.firewalld
+    - minarm.lvm
+    - minarm.elastic
+  roles:
+    - role: minarm.lvm.lvm_install
+    - role: minarm.firewalld.firewalld_install
+  tasks:
+    - name: Installer Elasticsearch via le rôle minarm.elastic.elasticsearch_install
+      ansible.builtin.include_role:
+        name: minarm.elastic.elasticsearch_install
+        tasks_from: install
+      vars:
+        # Installation conforme au README minarm.elastic : le rôle construit lui-même
+        # l'URL du RPM depuis es_package_url + es_version.
+        # On ne passe donc plus es_custom_package_url et on ne télécharge plus le RPM
+        # Elasticsearch depuis le dépôt générique Médusa/JFrog.
+        es_start_service: false # noqa: var-naming[no-role-prefix]
+
+    - name: Refermer le port 5601 sur les nœuds Elasticsearch si le rôle minarm.elastic l'a ouvert
+      ansible.posix.firewalld:
+        port: "5601/tcp"
+        state: disabled
+        permanent: true
+        immediate: true
+      failed_when: false
+
+- name: Générer la CA et les certificats Elasticsearch sur le nœud bootstrap
+  hosts: node1
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Créer le répertoire temporaire bootstrap
+      ansible.builtin.file:
+        path: "{{ es_tmp_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Construire instances.yml depuis template Jinja
+      ansible.builtin.template:
+        src: "{{ instances_template }}"
+        dest: "{{ es_tmp_dir }}/instances.yml"
+        mode: "0644"
+
+    - name: Générer la CA pour le cluster Elasticsearch
+      ansible.builtin.command: >
+        /usr/share/elasticsearch/bin/elasticsearch-certutil ca
+        --pem --silent
+        --out {{ es_tmp_dir }}/es-ca.zip
+      args:
+        creates: "{{ es_tmp_dir }}/es-ca.zip"
+
+    - name: Créer le répertoire de décompression de la CA
+      ansible.builtin.file:
+        path: "{{ es_tmp_dir }}/ca"
+        state: directory
+        mode: "0755"
+
+    - name: Décompresser la CA
+      ansible.builtin.unarchive:
+        src: "{{ es_tmp_dir }}/es-ca.zip"
+        dest: "{{ es_tmp_dir }}/ca"
+        remote_src: true
+
+    - name: Aplatir la structure CA si elasticsearch-certutil a créé un sous-dossier ca/
+      ansible.builtin.shell: |
+        set -euo pipefail
+        shopt -s dotglob nullglob
+        mv "{{ es_tmp_dir }}/ca/ca/"* "{{ es_tmp_dir }}/ca/"
+        rmdir "{{ es_tmp_dir }}/ca/ca"
+      args:
+        executable: /bin/bash
+        removes: "{{ es_tmp_dir }}/ca/ca"
+
+    - name: Générer les certificats des nœuds Elasticsearch
+      ansible.builtin.command: >
+        /usr/share/elasticsearch/bin/elasticsearch-certutil cert
+        --pem --silent
+        --ca-cert {{ es_tmp_dir }}/ca/{{ ca_elastic }}
+        --ca-key {{ es_tmp_dir }}/ca/{{ ca_key_elastic }}
+        --in {{ es_tmp_dir }}/instances.yml
+        --out {{ es_tmp_dir }}/es-certs.zip
+      args:
+        creates: "{{ es_tmp_dir }}/es-certs.zip"
+
+    - name: Décompresser les certificats des nœuds
+      ansible.builtin.unarchive:
+        src: "{{ es_tmp_dir }}/es-certs.zip"
+        dest: "{{ es_tmp_dir }}"
+        remote_src: true
+
+- name: Déposer les certificats Elasticsearch dans Médusa
+  hosts: node1
+  become: true
+  collections:
+    - minarm.gds
+  tasks:
+    - name: Construire la liste des certificats Elasticsearch à déposer
+      ansible.builtin.set_fact:
+        elasticsearch_cert_uploads:
+          - src: "{{ ca_cert_file_path }}"
+            dest: "{{ medusa_cert_file_path }}"
+          - src: "{{ ca_key_file_path }}"
+            dest: "{{ medusa_ca_key_file_path }}"
+          - src: "{{ es_nodes.node1.cert }}"
+            dest: "{{ medusa_es_nodes.node1.cert }}"
+          - src: "{{ es_nodes.node1.key }}"
+            dest: "{{ medusa_es_nodes.node1.key }}"
+          - src: "{{ es_nodes.node2.cert }}"
+            dest: "{{ medusa_es_nodes.node2.cert }}"
+          - src: "{{ es_nodes.node2.key }}"
+            dest: "{{ medusa_es_nodes.node2.key }}"
+          - src: "{{ es_nodes.node3.cert }}"
+            dest: "{{ medusa_es_nodes.node3.cert }}"
+          - src: "{{ es_nodes.node3.key }}"
+            dest: "{{ medusa_es_nodes.node3.key }}"
+
+    - name: Dépôt des certificats Elasticsearch dans Médusa
+      ansible.builtin.command:
+        argv:
+          - curl
+          - --fail
+          - --silent
+          - --show-error
+          - -X
+          - PUT
+          - -T
+          - "{{ item.src }}"
+          - "https://{{ artifactory_user }}:{{ artifactory_password }}@{{ medusa_cert_url }}{{ item.dest }}"
+      loop: "{{ elasticsearch_cert_uploads }}"
+      loop_control:
+        label: "{{ item.dest }}"
+      changed_when: false
+      no_log: true
+
+- name: Récupérer la CA Elasticsearch depuis Médusa
+  hosts: "front:elasticsearch_cluster:loadbalancer:kibana"
+  become: true
+  environment:
+    MINARM_ATF_REPO_LIVRABLE_BASEURL: "{{ medusa_url }}"
+  collections:
+    - minarm.gds
+    - minarm.core
+  tasks:
+    - name: Copier ca.crt de Médusa dans /tmp
+      minarm.core.adaptable.get_url:
+        url: "atf://{{ medusa_cert_file_path }}"
+        dest: "{{ vm_file_path }}"
+        url_category: livrable
+        username: "{{ artifactory_user }}"
+        password: "{{ artifactory_password }}"
+
+- name: Installer la CA Elasticsearch dans le magasin système des consommateurs
+  hosts: "front:loadbalancer:kibana"
+  become: true
+  gather_facts: false
+  tasks:
+    - name: S'assurer que le paquet ca-certificates est présent
+      ansible.builtin.package:
+        name: ca-certificates
+        state: present
+
+    - name: Copier la CA Elasticsearch dans /etc/pki/ca-trust/source/anchors/
+      ansible.builtin.copy:
+        src: "{{ vm_file_path }}{{ ca_elastic }}"
+        dest: "/etc/pki/ca-trust/source/anchors/{{ ca_elastic }}"
+        owner: root
+        group: root
+        mode: "0644"
+        remote_src: true
+      notify: Mettre à jour le magasin CA
+
+  handlers:
+    - name: Mettre à jour le magasin CA
+      ansible.builtin.command: update-ca-trust extract
+      changed_when: true
+
+- name: Récupérer les certificats de chaque nœud Elasticsearch depuis Médusa
+  hosts: elasticsearch_cluster
+  become: true
+  environment:
+    MINARM_ATF_REPO_LIVRABLE_BASEURL: "{{ medusa_url }}"
+  collections:
+    - minarm.gds
+    - minarm.core
+  tasks:
+    - name: Vérifier que es_node_key est défini pour le nœud courant
+      ansible.builtin.assert:
+        that:
+          - es_node_key is defined
+          - es_node_key is match('^node[0-9]+$')
+        fail_msg: "es_node_key non défini ou invalide sur {{ inventory_hostname }}"
+
+    - name: Copier les certificats du nœud courant depuis Médusa dans /tmp
+      minarm.core.adaptable.get_url:
+        url: "atf://{{ item }}"
+        dest: "{{ vm_file_path }}"
+        url_category: livrable
+        username: "{{ artifactory_user }}"
+        password: "{{ artifactory_password }}"
+      loop:
+        - "{{ medusa_es_nodes[es_node_key].cert }}"
+        - "{{ medusa_es_nodes[es_node_key].key }}"
+        - "{{ medusa_cert_file_path }}"
+
+- name: Configurer Elasticsearch en cluster XAPI_MN avec TLS et sécurité
+  hosts: elasticsearch_cluster
+  become: true
+  environment:
+    MINARM_ATF_REPO_LIVRABLE_BASEURL: "{{ medusa_url }}"
+  collections:
+    - minarm.gds
+  roles:
+    - role: elastic_cluster
+    - role: clear_tmp_elasticsearch
