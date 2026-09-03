@@ -1,0 +1,40 @@
+---
+# Pour pouvoir exécuter le Service Promotion du SI, avec l'include de CALI-T dans le fichier .gitlab-ci.yml,
+# Il est nécessaire de commenter la partie CALI-T (ou la partie Promotion du SI selon ce que l'on souhaite exécuter).
+
+include:
+  - project: ZS_CONTINUITY/cali-t
+    ref: 1.2.0
+    file: .cali.yml
+    rules:
+      - if: '$CI_PIPELINE_SOURCE == "push"'
+      - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  # - project: ZS_CONTINUITY/service-promotion-du-si
+  #   ref: 2.4.0
+  #   file: .promotion-du-si.yml
+
+variables:
+# Pour nommer l'archive finale, À INCRÉMENTER OBLIGATOIREMENT À CHAQUE RELIVRAISON
+  VERSION_SI: 1.0.0
+
+# Chemin vers le fichier hosts.yml du projet Ansible
+  INVENTAIRE_SI_VMS: inventories/integration/hosts.yml
+
+# Chemin vers le dossier des variables Ansible (ex integration)
+  INVENTAIRE_SI_VARIABLES: inventories/integration
+
+# Nom du SI déployé, en minuscule
+  NOM_SI: xapi_mn
+
+# Alias dns du SI déployé
+  ALIAS_DNS: integ-xapi-mn
+
+# Plateforme sur laquelle sera livré le projet, en majuscule
+  PLATEFORME_DESTINATION: C1DR
+
+# Nom de la Zone Projet, en minuscule
+  TENANT_LOWER: zpn_xapi_mn
+
+  ANSIBLE_SI_EXTRA_VARS: |
+    vault_server_tower_role_id=$VAULT_ROLE_ID
+    vault_server_tower_secret_id=$VAULT_SECRET_ID
