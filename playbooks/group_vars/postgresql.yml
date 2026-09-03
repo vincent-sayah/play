@@ -42,7 +42,13 @@ mode_private_key: "0640"
 # La commande prédéfinie échoue si PostgreSQL est arrêté, notamment pendant
 # le clonage du standby.
 web_service: none
-agent_command: "if /usr/bin/systemctl is-active --quiet postgresql-{{ postgresql_pg_major }}; then sudo /usr/bin/systemctl reload postgresql-{{ postgresql_pg_major }}; else /bin/true; fi"
+agent_command: >-
+  if /usr/bin/systemctl is-active --quiet
+  postgresql-{{ postgresql_pg_major }};
+  then sudo /usr/bin/systemctl reload
+  postgresql-{{ postgresql_pg_major }};
+  else /bin/true;
+  fi
 
 # PostgreSQL est d'abord installé sans TLS.
 # TLS sera activé après la génération des fichiers par Vault.
