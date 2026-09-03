@@ -66,7 +66,6 @@ mode_private_key: "0640"
 # Le rôle GDS ne doit pas générer de configuration web.
 web_service: none
 
-
 #############################################
 ##               RUCHE                     ##
 ##                                         ##
@@ -115,8 +114,6 @@ kibana_certs_dir: "/etc/kibana/certs"
 kibana_elasticsearch_ca_src: "{{ vm_file_path }}{{ ca_elastic }}"
 kibana_elasticsearch_ca_path: "{{ kibana_certs_dir }}/{{ ca_elastic }}"
 
-
-
 # kibana crt et key
 # kibana_elasticsearch_crt_src: "{{ vm_file_path }}{{ server_kibana_crt }}"
 # kibana_elasticsearch_key_src: "{{ vm_file_path }}{{ server_kibana_key }}"
@@ -141,7 +138,6 @@ kibana_cert_path: "{{ kibana_certs_dir }}/kibana-vault-fullchain.pem"
 # Cela évite de maintenir une deuxième copie de la clé privée.
 
 kibana_key_path: "{{ vault_agent_https_pk }}"
-
 
 ############################
 # Config Nginx pour Kibana #
