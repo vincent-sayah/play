@@ -1,0 +1,79 @@
+---
+
+collections:
+## GENERAL
+# Utilisé pour de nombreux modules et plugins communs d'Ansible
+  - name: community.general
+    version: 7.5.5
+    type: galaxy
+
+  - name: minarm.core
+    version: 8.0.2
+    type: galaxy
+
+##  Utilisé pour l'installation et l'utilisation d'Ansible Vault
+  - name: minarm.gds
+    version: 8.1.0
+    type: galaxy
+
+##  Utilisé pour le partitionnement des disques
+  - name: minarm.lvm
+    version: 8.0.0
+    type: galaxy
+
+## Observabilité
+  - name: minarm.observability
+    version: 8.0.0
+    type: galaxy
+
+## DATABASE
+# Utilisé pour l'installation de postgresql
+  - name: minarm.postgresql
+    version: 8.0.6
+    type: galaxy
+
+# Utilisé pour la restauration de la base
+  - name: community.postgresql
+    version: 3.14.2
+    type: galaxy
+
+##  Utilisé pour le pare feu
+  - name: minarm.firewalld
+    version: 8.0.1
+    type: galaxy
+
+## Utilisé pour l'installation de Haproxy
+  - name: minarm.haproxy
+    version: 8.0.6
+    type: galaxy
+
+## Utilisé pour l'installation de Apache
+  - name: minarm.apache
+    version: 8.0.5
+    type: galaxy
+
+## Utilisé pour l'installation de PHP
+  - name: minarm.php
+    version: 8.0.5
+    type: galaxy
+
+## ELASTIC
+# Utilisé pour l'installation Elasticsearch / Kibana
+  - name: minarm.elastic
+    version: 8.0.1
+    type: galaxy
+
+## java collection
+  - name: minarm.java
+    version: 8.0.6
+    type: galaxy
+
+## posix linux
+  - name: ansible.posix
+    version: 1.5.1
+    type: galaxy
+
+## Nginx
+  - name: minarm.nginx
+    version: 8.0.5
+    type: galaxy
