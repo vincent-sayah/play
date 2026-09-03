@@ -8,7 +8,6 @@
   gather_facts: true
   tasks: []
 
-
 #####################################################################
 # POSTGRESQL REPLICA
 #####################################################################
@@ -18,98 +17,65 @@
   become: true
 
   environment:
-
     MINARM_YUM_REPO_NATIONAL_ORIGIN: "{{ minarm_yum_repo_norigin }}"
-
     MINARM_ATF_REPO_MIDDLEWARE_BASEURL: "{{ minarm_atf_repo_mbaseurl }}"
-
-    # Le rôle minarm.postgresql utilise psql -w.
-    # Sur une installation existante, pg_hba.conf est déjà en SCRAM.
     PGPASSFILE: /var/lib/pgsql/.pgpass
 
-
   collections:
-
     - minarm.gds
     - minarm.lvm
     - minarm.postgresql
     - minarm.firewalld
 
-
-  ###################################################################
-  # PRE-TASKS
-  ###################################################################
-
   pre_tasks:
-
     - name: Vérifier si postgresql.conf existe déjà
       ansible.builtin.stat:
-
         path: "{{ postgresql_data_dir }}/postgresql.conf"
-
       register: pg_conf_existing
-
-
-    #################################################################
-    # CAS D'UNE INSTALLATION EXISTANTE
-    #################################################################
 
     - name: Garantir le fichier pgpass sur un PostgreSQL déjà installé
       ansible.builtin.file:
-
         path: /var/lib/pgsql/.pgpass
-
         state: touch
-
         owner: postgres
         group: postgres
-
         mode: "0600"
-
         modification_time: preserve
         access_time: preserve
-
       when:
         - pg_conf_existing.stat.exists
-
 
     - name: Garantir les credentials postgres dans pgpass
       ansible.builtin.lineinfile:
-
         path: /var/lib/pgsql/.pgpass
-
-        regexp: "^{{ item | regex_escape() }}:{{ postgresql_port | default(5432) }}:postgres:{{ (postgresql_db_account | default('postgres')) | regex_escape() }}:"
-
-        line: "{{ item }}:{{ postgresql_port | default(5432) }}:postgres:{{ postgresql_db_account | default('postgres') }}:{{ postgresql_db_account_password }}"
-
+        regexp: >-
+          {{
+            '^' ~ (item | regex_escape()) ~
+            ':' ~ (postgresql_port | default(5432) | string) ~
+            ':postgres:' ~
+            ((postgresql_db_account | default('postgres')) | regex_escape()) ~
+            ':'
+          }}
+        line: >-
+          {{
+            item ~ ':' ~ (postgresql_port | default(5432) | string) ~
+            ':postgres:' ~
+            (postgresql_db_account | default('postgres')) ~
+            ':' ~ postgresql_db_account_password
+          }}
         state: present
-
         owner: postgres
         group: postgres
-
         mode: "0600"
-
       loop:
-
         - localhost
         - 127.0.0.1
-
       when:
         - pg_conf_existing.stat.exists
-
       no_log: true
 
-
-  ###################################################################
-  # ROLES
-  ###################################################################
-
   roles:
-
     - role: install_divers
-
     - role: minarm.firewalld.firewalld_install
-
     - role: minarm.postgresql.postgresql_install
-
     - role: config_postgres_replica
