@@ -88,7 +88,6 @@ kibana_config_path: "/etc/kibana/kibana.yml"
 # PORT
 server_port_kibana: 5601
 
-
 # Variables minimales attendues par minarm.elastic.kibana_install.
 # La configuration finale complète reste rendue par :
 #
@@ -144,7 +143,6 @@ nginx_conf_d_files:
 kibana_backend_host: "127.0.0.1"
 kibana_backend_port: "{{ server_port_kibana | default(5601) }}"
 kibana_backend_url: "https://{{ kibana_backend_host }}:{{ kibana_backend_port }}"
-
 
 #####################################################################
 # Trust store système utilisé par Nginx pour vérifier Kibana
