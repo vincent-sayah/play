@@ -24,38 +24,38 @@
     - minarm.php
 
   pre_tasks:
-  - name: Calculer le CN attendu pour POPRTAILXAPI
-    ansible.builtin.set_fact:
-      xapi_expected_vault_cn: "{{ alias_dns_portailxapi }}.{{ zone_url }}"
+    - name: Calculer le CN attendu pour POPRTAILXAPI
+      ansible.builtin.set_fact:
+        xapi_expected_vault_cn: "{{ alias_dns_portailxapi }}.{{ zone_url }}"
 
-  - name: Forcer les paramètres du certificat PORTAILXAPI
-    ansible.builtin.set_fact:
-      vault_agent_https_cn: "{{ xapi_expected_vault_cn }}"
-      vault_agent_https_sans:
-        - "{{ xapi_expected_vault_cn }}"
+    - name: Forcer les paramètres du certificat PORTAILXAPI
+      ansible.builtin.set_fact:
+        vault_agent_https_cn: "{{ xapi_expected_vault_cn }}"
+        vault_agent_https_sans:
+          - "{{ xapi_expected_vault_cn }}"
 
-  - name: Vérifier que la priorité des variables AAP ne surcharge pas le CN
-    ansible.builtin.assert:
-      that:
-        - vault_agent_https_cn == xapi_expected_vault_cn
-        - xapi_expected_vault_cn in vault_agent_https_sans
-      fail_msg: >-
-        Le CN effectif est {{ vault_agent_https_cn }}, alors que
-        {{ xapi_expected_vault_cn }} est attendu.
-        Une extra-var AAP surcharge probablement la valeur du playbook.
-      success_msg: >-
-        Le CN Vault est correctement défini :
-        {{ vault_agent_https_cn }}
+    - name: Vérifier que la priorité des variables AAP ne surcharge pas le CN
+      ansible.builtin.assert:
+        that:
+          - vault_agent_https_cn == xapi_expected_vault_cn
+          - xapi_expected_vault_cn in vault_agent_https_sans
+        fail_msg: >-
+          Le CN effectif est {{ vault_agent_https_cn }}, alors que
+          {{ xapi_expected_vault_cn }} est attendu.
+          Une extra-var AAP surcharge probablement la valeur du playbook.
+        success_msg: >-
+          Le CN Vault est correctement défini :
+          {{ vault_agent_https_cn }}
 
-  - name: Afficher les paramètres non sensibles du certificat
-    ansible.builtin.debug:
-      msg:
-        - "CN attendu={{ xapi_expected_vault_cn }}"
-        - "CN effectif={{ vault_agent_https_cn }}"
-        - "SAN={{ vault_agent_https_sans }}"
-        - "Certificat={{ vault_agent_https_cert }}"
-        - "Clé={{ vault_agent_https_pk }}"
-        - "Chaîne={{ vault_agent_https_ca_chain }}"
+    - name: Afficher les paramètres non sensibles du certificat
+      ansible.builtin.debug:
+        msg:
+          - "CN attendu={{ xapi_expected_vault_cn }}"
+          - "CN effectif={{ vault_agent_https_cn }}"
+          - "SAN={{ vault_agent_https_sans }}"
+          - "Certificat={{ vault_agent_https_cert }}"
+          - "Clé={{ vault_agent_https_pk }}"
+          - "Chaîne={{ vault_agent_https_ca_chain }}"
 
   ## Appel dans l'ordre d'exécution des roles minarm et des roles customs.
   roles:
