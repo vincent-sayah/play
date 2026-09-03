@@ -124,6 +124,25 @@
     delay: 1
     timeout: 60
 
+# Le pg_hba.conf impose scram-sha-256 pour les connexions locales.
+# On garantit donc une entrée .pgpass pour le compte DB postgres afin que
+# les contrôles locaux suivants (SHOW ssl, pg_is_in_recovery, etc.) puissent
+# s'authentifier sans modifier les règles de sécurité pg_hba.conf.
+- name: Garantir les entrées pgpass locales du compte PostgreSQL postgres
+  ansible.builtin.lineinfile:
+    path: /var/lib/pgsql/.pgpass
+    regexp: "^{{ item | regex_escape() }}:5432:postgres:{{ (postgresql_db_account | default('postgres')) | regex_escape() }}:"
+    line: "{{ item }}:5432:postgres:{{ postgresql_db_account | default('postgres') }}:{{ postgresql_db_account_password }}"
+    state: present
+    create: true
+    owner: postgres
+    group: postgres
+    mode: "0600"
+  loop:
+    - localhost
+    - 127.0.0.1
+  no_log: true
+
 - name: Vérifier que PostgreSQL utilise TLS
   become: true
   become_user: postgres
@@ -141,12 +160,13 @@
       - -Atqc
       - "SHOW ssl;"
   environment:
-    PGPASSWORD: "{{ postgresql_db_account_password }}"
+    PGPASSFILE: /var/lib/pgsql/.pgpass
   register: postgresql_ssl_status
   changed_when: false
-  failed_when:
-    - postgresql_ssl_status.rc != 0
-    - postgresql_ssl_status.stdout | trim != 'on'
+  failed_when: >-
+    (postgresql_ssl_status.rc != 0)
+    or
+    (postgresql_ssl_status.stdout | trim != 'on')
 
 - name: Vérifier que la session de contrôle est réellement chiffrée en TLS
   become: true
@@ -165,13 +185,14 @@
       - -Atqc
       - "SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid();"
   environment:
-    PGPASSWORD: "{{ postgresql_db_account_password }}"
+    PGPASSFILE: /var/lib/pgsql/.pgpass
     PGSSLMODE: require
   register: postgresql_ssl_session_status
   changed_when: false
-  failed_when:
-    - postgresql_ssl_session_status.rc != 0
-    - postgresql_ssl_session_status.stdout | trim != 't'
+  failed_when: >-
+    (postgresql_ssl_session_status.rc != 0)
+    or
+    (postgresql_ssl_session_status.stdout | trim != 't')
 
 - name: Vérifier que Vault Agent est actif
   ansible.builtin.command:
